@@ -1,0 +1,65 @@
+:root {
+  --bg: #12151b; --panel: #1b1f27; --line: #2a2e37; --text: #e6e8eb; --muted: #8b94a3;
+  --working: #4fd07a; --waiting: #f2c14e; --idle: #8b94a3; --error: #ff6b6b; --offline: #5a6069;
+  --pixel: "Courier New", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+a { color: inherit; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand strong { font-size: 15px; letter-spacing: .02em; }
+.right { display: flex; gap: 14px; align-items: center; }
+.clock { font-variant-numeric: tabular-nums; }
+.live { width: 9px; height: 9px; border-radius: 50%; background: var(--offline); flex: none; }
+.live[data-on="1"] { background: var(--working); box-shadow: 0 0 0 3px rgb(79 208 122 / .18); }
+.banner { text-align: center; padding: 6px 16px; background: #2b2233; color: #ffd9f0; font-weight: 600; letter-spacing: .02em; }
+.stage { padding: 16px; overflow-x: auto; }
+.board { position: relative; margin: 0 auto; width: max-content; border-radius: 6px; box-shadow: 0 10px 40px rgb(0 0 0 / .45); }
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: 6px; }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+.overlay > * { position: absolute; transform: translate(-50%, 0); pointer-events: auto; }
+.room-name { transform: translate(-50%, 0); background: #2a2e37; color: #f2efe6; font: 700 calc(4px * var(--s)) / 1.2 var(--pixel); padding: calc(1px * var(--s)) calc(3px * var(--s)); border-radius: 3px; letter-spacing: .08em; white-space: nowrap; pointer-events: none; box-shadow: 0 1px 0 rgb(0 0 0 / .3); }
+.plate { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: calc(30px * var(--s)); max-width: calc(46px * var(--s)); padding: calc(1px * var(--s)) calc(3px * var(--s)); background: rgb(22 25 31 / .92); border: 1px solid #3a3f4b; border-radius: 4px; color: var(--text); cursor: pointer; font: 600 calc(3.4px * var(--s)) / 1.25 var(--pixel); text-align: center; position: absolute; overflow: hidden; }
+.plate::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--p, 0) * 100%); background: var(--working); }
+.plate:hover, .plate:focus-visible { border-color: #6b7380; outline: none; }
+.plate-name { text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.plate-name::before { content: "● "; color: var(--idle); }
+.plate[data-status="working"] .plate-name::before { color: var(--working); }
+.plate[data-status="waiting"] .plate-name::before { color: var(--waiting); }
+.plate[data-status="error"] .plate-name::before { color: var(--error); }
+.plate[data-status="offline"] .plate-name::before { color: var(--offline); }
+.plate-role { color: var(--muted); font-weight: 400; white-space: nowrap; }
+.plate-status { font-weight: 400; white-space: nowrap; color: var(--idle); }
+.plate[data-status="working"] .plate-status { color: var(--working); }
+.plate[data-status="waiting"] .plate-status { color: var(--waiting); }
+.plate[data-status="error"] .plate-status { color: var(--error); }
+.plate[data-status="offline"] { opacity: .7; }
+.bubble { transform: translate(-50%, -100%); max-width: calc(64px * var(--s)); background: #f7f3ea; color: #1b1f27; border: 1px solid #2a2e37; border-radius: 4px; padding: calc(.8px * var(--s)) calc(2.5px * var(--s)); font: 600 calc(3.2px * var(--s)) / 1.25 var(--pixel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.bubble::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -4px; border: 4px solid transparent; border-top-color: #f7f3ea; border-bottom: 0; }
+.bubble[data-status="error"] { background: #ffe1e1; }
+.bubble[data-status="waiting"] { background: #fff4d6; }
+.hit { transform: none; background: transparent; border: 0; cursor: pointer; padding: 0; }
+.hit:focus-visible { outline: 2px solid #7fd1ff; }
+.errors { position: fixed; left: 16px; bottom: 16px; max-width: min(560px, calc(100% - 32px)); background: #3a1d1d; color: #ffd6d6; border: 1px solid #6b2a2a; padding: 10px 12px; border-radius: 6px; font-size: 13px; z-index: 5; }
+.panel { position: fixed; top: 0; right: 0; height: 100%; width: min(360px, 100%); background: var(--panel); border-left: 1px solid var(--line); padding: 20px 18px; overflow-y: auto; z-index: 10; box-shadow: -10px 0 30px rgb(0 0 0 / .35); }
+.panel h2 { margin: 0 32px 2px 0; font-size: 18px; }
+.panel p { margin: 4px 0; }
+.p-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 20px; cursor: pointer; }
+.p-status { font-weight: 600; }
+.p-status[data-status="working"], .h-status[data-status="working"] { color: var(--working); }
+.p-status[data-status="waiting"], .h-status[data-status="waiting"] { color: var(--waiting); }
+.p-status[data-status="error"], .h-status[data-status="error"] { color: var(--error); }
+.p-status[data-status="offline"], .h-status[data-status="offline"] { color: var(--offline); }
+.p-task { background: #12151b; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 1em; }
+.p-task:empty { display: none; }
+.history { list-style: none; padding: 0; margin: 16px 0 0; border-top: 1px solid var(--line); }
+.history li { display: grid; grid-template-columns: 92px 84px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.history li.empty { display: block; color: var(--muted); }
+.h-when { color: var(--muted); font-variant-numeric: tabular-nums; }
+.h-task { overflow-wrap: anywhere; }
+.foot { text-align: center; padding: 8px 16px 16px; }
+@media (max-width: 640px) { .stage { padding: 8px; } .right #theme { display: none; } }

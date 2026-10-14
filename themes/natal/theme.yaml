@@ -1,0 +1,78 @@
+# Tema de Natal · aparece sozinho de 1 a 26 de dezembro
+nome: Natal
+titulo: "Boas festas!"
+periodo: { de: "12-01", ate: "12-26" }
+efeito: neve
+
+enfeites:
+  - { sprite: pisca, ponto: teto }                 # luzinhas ao longo do topo de cada sala
+  - { sprite: guirlanda, ponto: parede, cada: 5, offset: 2 }
+  - { sprite: arvore, ponto: canto }
+  - { sprite: presente, ponto: mesa }
+  - { sprite: gorro, ponto: cabeca }
+
+desenhos:
+  pisca:
+    paleta: { w: "#2f5a35", r: "#ff5c5c", y: "#ffd84a", b: "#5cb8ff", g: "#6be675" }
+    pixels:
+      - "wwwwwwwwwwwwwwww"
+      - "..w.....w.....w."
+      - ".rrr...yyy...bb."
+      - ".rrr...yyy...bb."
+      - "..r.....y.....b."
+  guirlanda:
+    paleta: { g: "#2f7a3d", G: "#45a356", r: "#e03c3c", R: "#a82828" }
+    pixels:
+      - "...GGGG..."
+      - "..GgGGgG.."
+      - ".Gg....gG."
+      - ".G......G."
+      - ".gr....rg."
+      - ".Gg....gG."
+      - "..GgrrgG.."
+      - "...GRRG..."
+      - "....RR...."
+  arvore:
+    paleta: { s: "#ffd84a", g: "#2f7a3d", G: "#3f9a4f", r: "#ff5c5c", b: "#5cb8ff", y: "#ffd84a", t: "#6e472b", v: "#b5653a" }
+    pixels:
+      - ".......s........"
+      - "......sss......."
+      - ".......G........"
+      - "......GGG......."
+      - ".....GgGrG......"
+      - "....GGGGGGG....."
+      - "......GgG......."
+      - ".....GGbGGG....."
+      - "....GgGGGGgG...."
+      - "...GGGGyGGGGG..."
+      - ".....GgGGGg....."
+      - "....GGGGrGGG...."
+      - "...GgGbGGGGgG..."
+      - "..GGGGGGGGyGGG.."
+      - "....GGgGGGGG...."
+      - "...GGGGrGGbGG..."
+      - "..GgGGGGGGGGgG.."
+      - ".GGGyGGGGGrGGGG."
+      - "......ttt......."
+      - "......ttt......."
+      - ".....vvvvv......"
+      - ".....vvvvv......"
+  presente:
+    paleta: { r: "#e03c3c", R: "#a82828", y: "#ffd84a" }
+    pixels:
+      - "..y.y..."
+      - "...y...."
+      - "rrryrrr."
+      - "rrryrrr."
+      - "yyyyyyy."
+      - "RRRyRRR."
+  gorro:
+    paleta: { r: "#e03c3c", R: "#b52b2b", w: "#ffffff" }
+    pixels:
+      - "........ww"
+      - "......rrww"
+      - "....rrrr.."
+      - "...rrrrR.."
+      - "..rrrrrRR."
+      - ".wwwwwwwww"
+      - ".wwwwwwwww"

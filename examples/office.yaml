@@ -1,0 +1,83 @@
+# Kaisha · configuração do escritório
+# Salve este arquivo e todos os navegadores abertos mudam na hora.
+# As chaves podem ser em português ou em inglês (salas/rooms, agentes/agents, ...).
+#
+# Coordenadas em blocos de 16 px: [coluna, linha]. Cada sala ocupa
+# [coluna, linha, largura, altura]; as 2 primeiras linhas da sala são parede.
+
+nome: Minha Empresa
+tema: auto            # auto = segue o calendário · natal, junina, ... · nenhum
+calendario: br
+
+salas:
+  - id: atendimento
+    nome: Atendimento
+    area: [0, 0, 11, 9]
+    piso: madeira       # madeira, carpete_azul, carpete_verde, ladrilho, xadrez
+  - id: comercial
+    nome: Comercial
+    area: [11, 0, 11, 9]
+    piso: carpete_azul
+  - id: operacao
+    nome: Operação
+    area: [0, 9, 11, 8]
+    piso: ladrilho
+  - id: supervisao
+    nome: Supervisão
+    area: [11, 9, 11, 8]
+    piso: xadrez
+
+agentes:
+  - id: atendimento
+    nome: Aura
+    cargo: Atendimento
+    sala: atendimento
+    mesa: [2, 3]          # mesa ocupa 2 blocos; o agente senta logo abaixo
+    cor: laranja          # cor da roupa: vermelho, laranja, amarelo, verde, azul, roxo, rosa, cinza
+  - id: triagem
+    nome: Radar
+    cargo: Classificação
+    sala: atendimento
+    mesa: [7, 3]
+    cor: verde
+  - id: vendas
+    nome: Closer
+    cargo: Comercial
+    sala: comercial
+    mesa: [13, 3]
+    cor: azul
+  - id: followup
+    nome: Pulse
+    cargo: Follow-up
+    sala: comercial
+    mesa: [18, 3]
+    cor: roxo
+  - id: agenda
+    nome: Tempo
+    cargo: Agenda
+    sala: operacao
+    mesa: [4, 12]
+    cor: amarelo
+  - id: supervisor
+    nome: Atlas
+    cargo: Supervisor
+    sala: supervisao
+    mesa: [15, 12]
+    cor: cinza
+
+moveis:
+  - { tipo: estante,   pos: [1, 2] }
+  - { tipo: planta,    pos: [10, 7] }
+  - { tipo: relogio,   pos: [8, 0] }
+  - { tipo: janela,    pos: [14, 0] }
+  - { tipo: quadro,    pos: [19, 0] }
+  - { tipo: planta,    pos: [11, 7] }
+  - { tipo: bebedouro, pos: [0, 11] }
+  - { tipo: arquivo,   pos: [8, 11] }
+  - { tipo: sofa,      pos: [12, 14] }
+  - { tipo: planta,    pos: [21, 15] }
+  - { tipo: grafico,   pos: [18, 9] }
+
+# Datas próprias: mostram uma faixa no topo (e, se quiser, um tema)
+datas_especiais:
+  - { data: "03-15", nome: "Aniversário da empresa", mensagem: "Parabéns, equipe!" }

@@ -1,0 +1,65 @@
+# Tema de Festa Junina · 1º de junho a 31 de julho
+nome: Festa Junina
+titulo: "Arraiá do escritório!"
+periodo: { de: "06-01", ate: "07-31" }
+
+enfeites:
+  - { sprite: bandeirinhas, ponto: teto }
+  - { sprite: lanterna, ponto: parede, cada: 6, offset: 3 }
+  - { sprite: fogueira, ponto: canto }
+  - { sprite: milho, ponto: mesa }
+  - { sprite: chapeu, ponto: cabeca }
+
+desenhos:
+  bandeirinhas:
+    paleta: { l: "#6e472b", r: "#e8483f", y: "#f2c14e", b: "#3f8fd8", g: "#4fa66a" }
+    pixels:
+      - "llllllllllllllll"
+      - "rrrr.yyyy.bbbb.g"
+      - ".rr...yy...bb..g"
+      - ".rr...yy...bb..."
+      - "..............."
+  lanterna:
+    paleta: { l: "#6e472b", o: "#f0883e", O: "#c0652a", y: "#ffd84a" }
+    pixels:
+      - "...l...."
+      - "..oooo.."
+      - ".oOyyOo."
+      - ".oyyyyo."
+      - ".oOyyOo."
+      - "..oooo.."
+      - "...O...."
+  fogueira:
+    paleta: { r: "#e8483f", o: "#f0883e", y: "#ffd84a", w: "#7a4b26", W: "#5b3b24" }
+    pixels:
+      - ".......y........"
+      - "......yo........"
+      - ".....yoo..y....."
+      - "....yooo.yo....."
+      - "....oorooo......"
+      - "...oorrroo......"
+      - "...orrrrrooy...."
+      - "..oorryrrro....."
+      - "..orryyyrro....."
+      - "...rryyyrr......"
+      - ".wWwwwWwwWwww..."
+      - "..WwwWwwwwWw...."
+      - ".wwWwwwWwwwWw..."
+  milho:
+    paleta: { y: "#f2c14e", Y: "#d9a637", g: "#4fa66a", G: "#367a4c" }
+    pixels:
+      - "..yY.."
+      - ".yYyY."
+      - ".YyYy."
+      - ".yYyY."
+      - "gYyYyg"
+      - "gGyYGg"
+      - ".gGGg."
+  chapeu:
+    paleta: { p: "#e0c27a", P: "#c4a15a", r: "#e8483f" }
+    pixels:
+      - "....pppp...."
+      - "...pPpPpp..."
+      - "...rrrrrr..."
+      - "pppppppppppp"
+      - ".PPPPPPPPPP."

@@ -1,0 +1,16 @@
+{
+  "name": "kaisha",
+  "version": "0.1.0",
+  "description": "Um escritório em pixel art que mostra seus agentes de IA trabalhando, ao vivo. Self-hosted, um container, fácil no EasyPanel.",
+  "license": "MIT",
+  "type": "module",
+  "main": "server/index.js",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server/index.js",
+    "dev": "DATA_DIR=./data KAISHA_API_KEY=dev node --no-warnings=ExperimentalWarning --watch server/index.js"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  }
+}

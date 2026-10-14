@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kaisha</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span id="live" class="live" data-on="0"></span><strong id="office-name">Kaisha</strong><span id="counts" class="muted"></span></div>
+    <div class="right"><span id="theme" class="muted"></span><span id="clock" class="clock"></span></div>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <main id="stage" class="stage">
+    <div class="board">
+      <canvas id="world"></canvas>
+      <div id="overlay" class="overlay"></div>
+    </div>
+  </main>
+  <div id="errors" class="errors" role="alert" hidden></div>
+  <aside id="panel" class="panel" hidden>
+    <button id="p-close" class="p-close" type="button" aria-label="Fechar">×</button>
+    <h2 id="p-name"></h2>
+    <p id="p-role" class="muted"></p>
+    <p id="p-status" class="p-status"></p>
+    <p id="p-task" class="p-task"></p>
+    <p id="p-updated" class="muted small"></p>
+    <ul id="p-history" class="history"></ul>
+  </aside>
+  <footer class="foot muted small"><a href="https://github.com/NEF-Producoes/kaisha" target="_blank" rel="noopener">Kaisha</a> · MIT</footer>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

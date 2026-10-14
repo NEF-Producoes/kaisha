@@ -1,0 +1,16 @@
+# Para rodar fora do EasyPanel: docker compose up -d
+services:
+  kaisha:
+    image: ghcr.io/nef-producoes/kaisha:latest
+    # build: .            # ou construa a partir do código
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      KAISHA_API_KEY: troque-por-um-token-longo
+      # VIEW_PASSWORD: senha-para-ver-o-painel
+      TZ: America/Sao_Paulo
+    volumes:
+      - kaisha-data:/data
+volumes:
+  kaisha-data:
