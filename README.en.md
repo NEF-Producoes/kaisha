@@ -16,7 +16,7 @@ Every agent gets a desk. When it starts a task the character types, the monitor 
 
 1. **App**: *+ Service → App*, source **Docker Image** `ghcr.io/nef-producoes/kaisha:latest` (or **GitHub** with this repo and the *Dockerfile* build).
 2. **Volume**: mount a volume at `/data`.
-3. **Environment**: `KAISHA_API_KEY=a-long-random-token` (optional `VIEW_PASSWORD`, `TZ`, `KAISHA_LANG=en`).
+3. **Environment**: `KAISHA_API_KEY=a-long-random-token` (optional `VIEW_PASSWORD`, `TZ`, `KAISHA_LANG=en`, `KAISHA_EXAMPLE` to pick which file in `examples/` seeds the first office.yaml).
 4. **Domain**: point it to **port 3000** with HTTPS.
 5. **Deploy**. On first start Kaisha writes an example `office.yaml` into the volume.
 

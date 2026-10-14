@@ -164,7 +164,10 @@ export function createOfficeStore({ dataDir, tz, onChange, log = console }) {
   const userThemes = path.join(dataDir, 'themes');
   fs.mkdirSync(dataDir, { recursive: true });
   if (!fs.existsSync(officeFile)) {
-    fs.copyFileSync(EXAMPLE_OFFICE, officeFile);
+    // KAISHA_EXAMPLE escolhe qual exemplo vira o primeiro office.yaml (ex.: musashi)
+    const nome = String(process.env.KAISHA_EXAMPLE || 'office').replace(/[^\w-]/g, '');
+    const escolhido = path.join(ROOT, 'examples', `${nome}.yaml`);
+    fs.copyFileSync(fs.existsSync(escolhido) ? escolhido : EXAMPLE_OFFICE, officeFile);
     log.info?.(`office.yaml de exemplo criado em ${officeFile}`);
   }
   let state = { office: null, themes: new Map(), erros: [], version: 0 };

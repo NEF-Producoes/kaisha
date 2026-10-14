@@ -22,6 +22,7 @@ Cada agente tem uma mesa. Quando ele começa uma tarefa, o boneco digita, o moni
    KAISHA_API_KEY=um-token-longo-e-aleatorio
    # VIEW_PASSWORD=senha-para-ver-o-painel   (opcional)
    TZ=America/Sao_Paulo
+   # KAISHA_EXAMPLE=musashi   (opcional: qual exemplo de examples/ vira o primeiro office.yaml)
    ```
 4. **Domínio**: em *Domínios*, aponte o seu domínio para a **porta 3000** com HTTPS.
 5. **Implante** e abra o domínio. No primeiro acesso o Kaisha cria um `office.yaml` de exemplo dentro do volume.
