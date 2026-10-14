@@ -10,7 +10,7 @@
 <body>
   <header class="top">
     <div class="brand"><span id="live" class="live" data-on="0"></span><strong id="office-name">Kaisha</strong><span id="counts" class="muted"></span><span id="score" class="muted score"></span></div>
-    <div class="right"><span id="theme" class="muted"></span><span id="clock" class="clock"></span></div>
+    <div class="right"><span id="theme" class="muted"></span><span id="clock" class="clock"></span><button id="edit-btn" class="btn" type="button" title="Editar o escritório">✎ Editar</button></div>
   </header>
   <div id="banner" class="banner" hidden></div>
   <main id="stage" class="stage">
@@ -28,6 +28,17 @@
     <p id="p-task" class="p-task"></p>
     <p id="p-updated" class="muted small"></p>
     <ul id="p-history" class="history"></ul>
+  </aside>
+  <aside id="editor" class="editor" hidden aria-label="Editar escritório">
+    <div class="ed-head"><strong>Editar escritório</strong><button id="ed-close" class="p-close" type="button" aria-label="Fechar">×</button></div>
+    <nav id="ed-tabs" class="ed-tabs" role="tablist">
+      <button type="button" data-aba="escritorio">Escritório</button><button type="button" data-aba="agentes">Agentes</button><button type="button" data-aba="salas">Salas</button><button type="button" data-aba="moveis">Móveis</button>
+    </nav>
+    <div id="ed-body" class="ed-body"></div>
+    <div id="ed-foot" class="ed-foot">
+      <p id="ed-msg" class="ed-msg small"></p>
+      <div class="ed-actions"><button id="ed-save" class="btn primary" type="button">Salvar</button><button id="ed-discard" class="btn" type="button">Descartar</button><button id="ed-logout" class="btn link" type="button">sair</button></div>
+    </div>
   </aside>
   <footer class="foot muted small"><a href="https://github.com/NEF-Producoes/kaisha" target="_blank" rel="noopener">Kaisha</a> · MIT</footer>
   <script type="module" src="app.js?v=__V__"></script>

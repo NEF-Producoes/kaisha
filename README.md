@@ -27,7 +27,9 @@ Cada agente tem uma mesa. Quando ele começa uma tarefa, o boneco digita, o moni
 4. **Domínio**: em *Domínios*, aponte o seu domínio para a **porta 3000** com HTTPS.
 5. **Implante** e abra o domínio. No primeiro acesso o Kaisha cria um `office.yaml` de exemplo dentro do volume.
 
-Para editar o escritório, abra o `office.yaml` do volume (pelo *Console* do EasyPanel ou pelo gerenciador de arquivos) e salve. O painel atualiza sozinho.
+**Editar pela tela:** clique em **✎ Editar** no topo do painel e informe a chave da API (`KAISHA_API_KEY`), que fica guardada só no navegador. Dá para renomear o escritório e os agentes, trocar cores, tema e planta, criar e ajustar salas, arrastar mesas e móveis no mapa e colocar móveis novos. **Salvar** grava o `office.yaml` (o anterior fica em `office.yaml.bak`) e todo mundo que estiver com o painel aberto vê na hora.
+
+Também dá para editar o escritório abrindo o `office.yaml` do volume (pelo *Console* do EasyPanel ou pelo gerenciador de arquivos) e salve. O painel atualiza sozinho.
 
 ### Sem EasyPanel
 

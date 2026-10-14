@@ -1,4 +1,5 @@
 // Kaisha · escritório no navegador
+import { initEditor } from './editor.js?v=__V__';
 import { T, sprite, cached, agentLook, agentSprite, walkerSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr } from './sprites.js?v=__V__';
 
 const I18N = {
@@ -489,6 +490,7 @@ function frame(t) {
   desenhaCorreio(dt);
   desenhaConfete(dt);
   drawEffect();
+  if (state.editing && state.editDraw) state.editDraw(g);
   g.setTransform(1, 0, 0, 1, 0, 0);
   moverOverlay();
 }
@@ -600,10 +602,13 @@ function drawEffect() {
 function resize() {
   if (!state.layout) return;
   const { W, H } = state.layout;
-  const disp = stage.clientWidth;
-  let s = disp / (W * T);
-  // pixel inteiro quando cabe; em telas pequenas fica em 2x com rolagem lateral, para os nomes continuarem legíveis
-  s = s >= 2 ? Math.floor(s * 2) / 2 : 2;
+  // cabe inteiro na tela (largura e altura), em passos de 1/4 para os pixels ficarem uniformes;
+  // em telas muito pequenas fica no mínimo 1,5x com rolagem, para os nomes continuarem legíveis
+  const cs = getComputedStyle(stage);
+  const livreW = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const livreH = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  let s = Math.min(livreW / (W * T), livreH / (H * T));
+  s = Math.max(1.5, Math.floor(s * 4) / 4);
   state.scale = s;
   canvas.width = W * T * s; canvas.height = H * T * s;
   canvas.style.width = canvas.width + 'px'; canvas.style.height = canvas.height + 'px';
@@ -735,6 +740,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#p-clos
 
 // ---------- dados ----------
 function applySnapshot(snap) {
+  // durante a edição o rascunho manda; a versão do servidor entra quando a edição termina
+  if (state.editing) { state.pendingSnap = snap; return; }
   const mudouTema = !state.snap || (state.snap.theme && state.snap.theme.id) !== (snap.theme && snap.theme.id);
   state.snap = snap;
   const lang = snap.office.lang || state.lang || 'pt-BR';
@@ -800,4 +807,5 @@ window.addEventListener('resize', resize);
 setInterval(refreshOverlay, 15000); // vira "offline" sem precisar de evento
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString(document.documentElement.lang, { hour: '2-digit', minute: '2-digit' }); }, 1000);
 
+initEditor({ state, rebuild, canvas, applySnapshot });
 loadState().then(() => { connect(); requestAnimationFrame(frame); }).catch((e) => { $('#errors').hidden = false; $('#errors').textContent = '⚠ ' + e.message; });

@@ -38,6 +38,8 @@ Config keys work in English or Portuguese (`rooms`/`salas`, `agents`/`agentes`, 
 
 **Office life**: idle agents walk around the office (coffee machine, water cooler, couch). When a task arrives their phone rings, they run to their desk and sit down to work. An agent with `central: true` always stays at the desk and tasks fly from it to whoever picks them up, which suits an orchestrator.
 
+**Edit from the screen**: click **✎ Edit** at the top, enter the API key (`KAISHA_API_KEY`, kept only in your browser) and rename the office and agents, change colors, theme and plan, add and resize rooms, drag desks and furniture on the map and place new furniture. **Save** writes `office.yaml` (the previous one is kept as `office.yaml.bak`) and every open dashboard updates right away.
+
 ## Themes
 
 Themes live in `themes/<id>/theme.yaml` (or `/data/themes/` for your own). Fixed or movable dates (Easter, Carnival, Black Friday), decorations placed on walls, ceilings, corners, desks and heads, sprites drawn as text, and effects (`snow`, `confetti`, `leaves`). See [CONTRIBUTING](CONTRIBUTING.md).

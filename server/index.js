@@ -159,6 +159,14 @@ const server = http.createServer(async (req, res) => {
       });
       return json(res, erros.length && !ok.length ? 400 : 200, { ok: ok.length, erros });
     }
+    // editor do painel: confere a chave e grava o escritório
+    if (p === '/api/auth' && req.method === 'GET') return canWrite(req) ? json(res, 200, { ok: true }) : json(res, 401, { erro: 'chave inválida' });
+    if (p === '/api/office' && req.method === 'PUT') {
+      if (!canWrite(req)) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
+      const body = await readBody(req, 512 * 1024);
+      const r = office.save(body);
+      return r.erros.length ? json(res, 400, { erros: r.erros }) : json(res, 200, { ok: true });
+    }
     if (req.method === 'DELETE' && p.startsWith('/api/agents/')) {
       if (!canWrite(req)) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
       const id = decodeURIComponent(p.slice('/api/agents/'.length));

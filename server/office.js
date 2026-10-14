@@ -226,5 +226,38 @@ export function createOfficeStore({ dataDir, tz, onChange, log = console }) {
 
   reload('início');
   ultima = assinatura();
-  return { snapshot, reload: () => reload('manual') };
+  // grava um escritório vindo do editor do painel: valida, guarda backup e escreve o office.yaml
+  const save = (dados) => {
+    const { erros, office } = validateOffice(dados);
+    if (erros.length) return { erros };
+    try { fs.copyFileSync(officeFile, officeFile + '.bak'); } catch { /* primeira gravação */ }
+    fs.writeFileSync(officeFile, toYaml(office));
+    reload('editor');
+    ultima = assinatura();
+    return { erros: [] };
+  };
+
+  return { snapshot, reload: () => reload('manual'), save };
+}
+
+// escreve o office.yaml em português, uma linha por sala, agente e móvel
+export function toYaml(o) {
+  const limpa = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined && v !== '' && v !== false));
+  const dados = limpa({
+    nome: o.name,
+    tema: o.theme,
+    planta: o.plan === 'open' ? 'aberta' : null,
+    calendario: o.calendar && o.calendar !== 'br' ? o.calendar : null,
+    idioma: o.lang,
+    salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null })),
+    agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null })),
+    moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
+    datas_especiais: o.special_days && o.special_days.length ? o.special_days.map((d) => limpa({ data: d.date, nome: d.name, tema: d.theme, mensagem: d.message })) : null,
+  });
+  const doc = new YAML.Document(dados);
+  for (const k of ['salas', 'agentes', 'moveis', 'datas_especiais']) {
+    const seq = doc.get(k, true);
+    if (seq && seq.items) for (const it of seq.items) it.flow = true;
+  }
+  return '# Escritório do Kaisha (editado pelo painel; pode editar à mão também)\n' + doc.toString({ lineWidth: 0, flowCollectionPadding: true });
 }
