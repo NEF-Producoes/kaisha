@@ -21,6 +21,9 @@ const I18N = {
 let L = I18N['pt-BR'];
 
 const $ = (s) => document.querySelector(s);
+// andar aberto no painel (?andar=nef); sem parâmetro, o principal
+const ANDAR = (new URLSearchParams(location.search).get('andar') || '').trim().toLowerCase();
+const api = (p) => (ANDAR ? p + (p.includes('?') ? '&' : '?') + 'andar=' + encodeURIComponent(ANDAR) : p);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 const stage = $('#stage');
@@ -724,7 +727,7 @@ async function fillPanel(agent, carregar) {
   if (!carregar) return;
   const ul = $('#p-history'); ul.innerHTML = '';
   try {
-    const r = await fetch(`/api/agents/${encodeURIComponent(agent.id)}/history?limit=40`).then((x) => x.json());
+    const r = await fetch(api(`/api/agents/${encodeURIComponent(agent.id)}/history?limit=40`)).then((x) => x.json());
     if (!r.history.length) ul.append(el('li', 'empty', L.noHistory));
     for (const h of r.history) {
       const li = el('li');
@@ -737,6 +740,20 @@ async function fillPanel(agent, carregar) {
 }
 $('#p-close').addEventListener('click', () => { $('#panel').hidden = true; state.selected = null; });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#p-close').click(); });
+
+// ---------- andares ----------
+// abas no topo, uma por andar (só aparecem quando há mais de um)
+function mostrarAndares(lista) {
+  const nav = $('#floors');
+  state.floors = lista || [];
+  nav.hidden = state.floors.length < 2;
+  nav.replaceChildren(...state.floors.map((f) => {
+    const a = el('a', 'floor-tab', f.name);
+    a.href = f.main ? location.pathname : `?andar=${encodeURIComponent(f.id)}`;
+    if (f.id === state.floor) a.setAttribute('aria-current', 'page');
+    return a;
+  }));
+}
 
 // ---------- dados ----------
 function applySnapshot(snap) {
@@ -776,7 +793,12 @@ function upsertAgents(list) {
 }
 
 async function loadState() {
-  const r = await fetch('/api/state').then((x) => x.json());
+  const resp = await fetch(api('/api/state'));
+  // andar que não existe (link antigo): volta para o principal
+  if (resp.status === 404 && ANDAR) { location.replace(location.pathname); return; }
+  const r = await resp.json();
+  state.floor = r.floor;
+  mostrarAndares(r.floors);
   state.offlineAfterMs = r.offlineAfterMs || state.offlineAfterMs;
   state.clockSkew = Date.now() - r.serverTime;
   state.lang = r.lang;
@@ -786,7 +808,7 @@ async function loadState() {
 }
 
 function connect() {
-  const es = new EventSource('/api/stream');
+  const es = new EventSource(api('/api/stream'));
   const dot = $('#live');
   es.addEventListener('hello', (e) => {
     dot.dataset.on = '1'; dot.title = L.connected;
@@ -795,6 +817,7 @@ function connect() {
     if (v && '__V__' !== '_' + '_V_' + '_' && v !== '__V__') location.reload();
   });
   es.addEventListener('agents', (e) => upsertAgents(JSON.parse(e.data)));
+  es.addEventListener('floors', (e) => mostrarAndares(JSON.parse(e.data)));
   es.addEventListener('score', (e) => { state.score = JSON.parse(e.data); mostrarPlacar(); });
   es.addEventListener('office', (e) => applySnapshot(JSON.parse(e.data)));
   es.addEventListener('removed', (e) => { state.agents.delete(JSON.parse(e.data).id); rebuild(); });
@@ -807,5 +830,5 @@ window.addEventListener('resize', resize);
 setInterval(refreshOverlay, 15000); // vira "offline" sem precisar de evento
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString(document.documentElement.lang, { hour: '2-digit', minute: '2-digit' }); }, 1000);
 
-initEditor({ state, rebuild, canvas, applySnapshot });
+initEditor({ state, rebuild, canvas, applySnapshot, api });
 loadState().then(() => { connect(); requestAnimationFrame(frame); }).catch((e) => { $('#errors').hidden = false; $('#errors').textContent = '⚠ ' + e.message; });

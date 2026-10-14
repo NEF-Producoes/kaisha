@@ -23,6 +23,13 @@ export const config = {
   historyDays: Number(process.env.HISTORY_DAYS) || 30,
   tz: process.env.TZ || 'America/Sao_Paulo',
   lang: process.env.KAISHA_LANG || process.env.LANG_UI || 'pt-BR',
+  // andares: id do andar principal (o office.yaml) e andares para criar a partir dos exemplos
+  mainFloor: String(process.env.KAISHA_ANDAR_PRINCIPAL || process.env.KAISHA_MAIN_FLOOR || 'principal').toLowerCase(),
+  seedFloors: String(process.env.KAISHA_ANDARES || process.env.KAISHA_FLOORS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean),
+  // chave própria de cada andar: KAISHA_API_KEY_NEF só escreve no andar "nef"
+  floorKeys: Object.entries(process.env)
+    .filter(([k, v]) => /^KAISHA_API_KEY_./.test(k) && k !== 'KAISHA_API_KEY_HEADER' && v)
+    .map(([k, v]) => ({ env: k.slice('KAISHA_API_KEY_'.length), key: v })),
 };
 
 export const STATUSES = ['working', 'waiting', 'idle', 'error', 'offline'];

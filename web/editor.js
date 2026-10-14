@@ -23,7 +23,7 @@ const CHAVE = 'kaisha_api_key';
 const lerChave = () => { try { return localStorage.getItem(CHAVE) || ''; } catch { return ''; } };
 const gravarChave = (v) => { try { if (v) localStorage.setItem(CHAVE, v); else localStorage.removeItem(CHAVE); } catch { /* sem armazenamento */ } };
 
-export function initEditor({ state, rebuild, canvas, applySnapshot }) {
+export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) => p }) {
   const painel = $('#editor');
   const corpo = $('#ed-body');
   const msg = $('#ed-msg');
@@ -33,6 +33,7 @@ export function initEditor({ state, rebuild, canvas, applySnapshot }) {
   let colocar = null;   // tipo de móvel escolhido na paleta
   let arrasto = null;
   let chave = lerChave();
+  let geral = false;    // a chave geral (KAISHA_API_KEY) pode criar andares
 
   const draft = () => state.snap.office;
   const aviso = (t, tipo = '') => { msg.textContent = t; msg.dataset.tipo = tipo; };
@@ -41,8 +42,9 @@ export function initEditor({ state, rebuild, canvas, applySnapshot }) {
   // ---------- abrir / fechar ----------
   async function abrir() {
     if (!chave) return pedirChave();
-    const ok = await fetch('/api/auth', { headers: { apikey: chave } }).then((r) => r.ok).catch(() => false);
-    if (!ok) { chave = ''; gravarChave(''); return pedirChave('chave inválida'); }
+    const r = await fetch(api('/api/auth'), { headers: { apikey: chave } }).catch(() => null);
+    if (!r || !r.ok) { chave = ''; gravarChave(''); return pedirChave(r ? 'chave inválida para este andar' : 'sem conexão com o servidor'); }
+    geral = !!(await r.json().catch(() => ({}))).master;
     original = structuredClone(state.snap.office);
     state.snap = { ...state.snap, office: structuredClone(original) };
     state.editing = true; state.editDirty = false;
@@ -63,7 +65,7 @@ export function initEditor({ state, rebuild, canvas, applySnapshot }) {
   function pedirChave(erro) {
     painel.hidden = false;
     corpo.replaceChildren(
-      el('p', { class: 'ed-help' }, 'Para editar o escritório, informe a chave da API (a mesma do KAISHA_API_KEY). Ela fica guardada só neste navegador.'),
+      el('p', { class: 'ed-help' }, 'Para editar o escritório, informe a chave da API: a geral (KAISHA_API_KEY) ou a deste andar (KAISHA_API_KEY_<ANDAR>). Ela fica guardada só neste navegador.'),
       el('form', { class: 'ed-key', onsubmit: (e) => { e.preventDefault(); chave = $('#ed-key-in').value.trim(); gravarChave(chave); abrir(); } },
         el('input', { id: 'ed-key-in', type: 'password', placeholder: 'chave da API', autocomplete: 'off', required: true }),
         el('button', { class: 'btn primary', type: 'submit' }, 'Entrar')),
@@ -73,7 +75,7 @@ export function initEditor({ state, rebuild, canvas, applySnapshot }) {
   }
   async function salvar() {
     aviso('salvando…');
-    const r = await fetch('/api/office', { method: 'PUT', headers: { apikey: chave, 'content-type': 'application/json' }, body: JSON.stringify(draft()) }).catch(() => null);
+    const r = await fetch(api('/api/office'), { method: 'PUT', headers: { apikey: chave, 'content-type': 'application/json' }, body: JSON.stringify(draft()) }).catch(() => null);
     if (!r) return aviso('sem conexão com o servidor', 'erro');
     if (r.status === 401) { chave = ''; gravarChave(''); return pedirChave('chave inválida'); }
     const j = await r.json().catch(() => ({}));
@@ -105,6 +107,25 @@ export function initEditor({ state, rebuild, canvas, applySnapshot }) {
         campo('Planta', escolha(o.plan, [['open', 'Aberta (um salão com divisórias)'], ['rooms', 'Salas separadas']], (v) => { o.plan = v; mudou(); })),
         el('p', { class: 'ed-help' }, 'Mesas e móveis se movem arrastando no mapa. Salas: aba Salas.'),
       );
+      if (geral) {
+        // novo andar: um escritório separado, com agentes, placar e chave próprios
+        let nomeAndar = '';
+        const criar = async () => {
+          const id = slug(nomeAndar).replace(/_/g, '-').slice(0, 32);
+          if (!id) return aviso('dê um nome para o andar', 'erro');
+          aviso('criando andar…');
+          const corpo2 = { name: nomeAndar.trim(), plan: 'open', rooms: [{ id: 'salao', name: 'Salão', area: [0, 0, 16, 10] }], furniture: [{ type: 'quadro', pos: [2, 0] }, { type: 'janela', pos: [8, 0] }] };
+          const r = await fetch(`/api/office?andar=${encodeURIComponent(id)}`, { method: 'PUT', headers: { apikey: chave, 'content-type': 'application/json' }, body: JSON.stringify(corpo2) }).catch(() => null);
+          const j = r ? await r.json().catch(() => ({})) : {};
+          if (!r || !r.ok) return aviso((j.erros || [j.erro || 'erro ao criar o andar']).join(' · '), 'erro');
+          location.href = `?andar=${encodeURIComponent(id)}`;
+        };
+        out.push(el('fieldset', { class: 'ed-card' },
+          el('legend', {}, 'Novo andar'),
+          el('p', { class: 'ed-help' }, 'Um escritório separado no mesmo Kaisha (outra empresa ou outro time), com agentes e placar próprios.'),
+          campo('Nome', texto('', (v) => { nomeAndar = v; }, { placeholder: 'ex.: Consultório' })),
+          el('button', { class: 'btn', type: 'button', onclick: criar }, '+ Criar andar')));
+      }
     }
     if (aba === 'agentes') {
       out.push(el('button', { class: 'btn', type: 'button', onclick: novoAgente }, '+ Agente'));

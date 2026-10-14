@@ -1,0 +1,33 @@
+# Andar do consultório da Dra. Erika Tavares: CRM e Financeiro da clínica (mesmo contrato da NEF).
+# As mesas já estão reservadas; os agentes aparecem como offline até os fluxos começarem a mandar status.
+# Os fluxos mandam "andar": "consultorio" (ou usam a chave KAISHA_API_KEY_CONSULTORIO, que só escreve aqui).
+# LGPD: o texto da tarefa aparece na tela. Não mande nome de paciente nem dado clínico, só o tipo de tarefa
+# ("cadastro de paciente novo", "pagamento recebido").
+nome: Consultório Dra. Erika
+ordem: 2
+tema: auto
+planta: aberta
+salas:
+  - { id: recepcao,   nome: Recepção,   area: [0, 0, 12, 8],  piso: madeira }
+  - { id: financeiro, nome: Financeiro, area: [12, 0, 12, 8], piso: carpete_azul }
+  - { id: espera,     nome: Sala de espera, area: [0, 8, 12, 6], piso: ladrilho }
+  - { id: arquivo,    nome: Arquivo,    area: [12, 8, 12, 6], piso: xadrez, parede: escura }
+agentes:
+  - { id: cadastro,   nome: Cadastro,   cargo: Pacientes,   sala: recepcao,   mesa: [2, 4],  cor: laranja }
+  - { id: prontuario, nome: Prontuário, cargo: Fichas,      sala: recepcao,   mesa: [7, 4],  cor: rosa }
+  - { id: caixa,      nome: Caixa,      cargo: Asaas e Inter, sala: financeiro, mesa: [16, 4], cor: verde }
+moveis:
+  - { tipo: janela,  pos: [1, 0] }
+  - { tipo: quadro,  pos: [9, 0] }
+  - { tipo: grafico, pos: [13, 0] }
+  - { tipo: relogio, pos: [23, 0] }
+  - { tipo: janela,  pos: [20, 0] }
+  - { tipo: planta,  pos: [10, 6] }
+  - { tipo: impressora, pos: [20, 6] }
+  - { tipo: sofa,      pos: [2, 11] }
+  - { tipo: sofa,      pos: [6, 11] }
+  - { tipo: bebedouro, pos: [10, 9] }
+  - { tipo: planta,    pos: [1, 9] }
+  - { tipo: arquivo,   pos: [14, 10] }
+  - { tipo: arquivo,   pos: [17, 10] }
+  - { tipo: estante,   pos: [20, 9] }

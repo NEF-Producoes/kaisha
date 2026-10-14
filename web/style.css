@@ -17,6 +17,12 @@ a { color: inherit; }
 .brand strong { font-size: 15px; letter-spacing: .02em; }
 .right { display: flex; gap: 14px; align-items: center; }
 .clock { font-variant-numeric: tabular-nums; }
+/* andares: abas no topo, uma por escritório */
+.floors { display: flex; gap: 2px; padding: 2px; background: #171a21; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; max-width: 100%; }
+.floors[hidden] { display: none; }
+.floor-tab { padding: 4px 12px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 13px; white-space: nowrap; }
+.floor-tab:hover { color: var(--text); background: #222731; }
+.floor-tab[aria-current="page"] { color: var(--text); background: #2a303c; box-shadow: inset 0 -2px 0 var(--working); }
 .live { width: 9px; height: 9px; border-radius: 50%; background: var(--offline); flex: none; }
 .live[data-on="1"] { background: var(--working); box-shadow: 0 0 0 3px rgb(79 208 122 / .18); }
 .banner { text-align: center; padding: 6px 16px; background: #2b2233; color: #ffd9f0; font-weight: 600; letter-spacing: .02em; }

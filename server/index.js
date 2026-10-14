@@ -5,7 +5,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, STATUSES } from './config.js';
 import { openDb } from './db.js';
-import { createOfficeStore, ROOT } from './office.js';
+import { ROOT } from './office.js';
+import { createFloors } from './floors.js';
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
@@ -16,23 +17,30 @@ const log = {
 
 if (!config.apiKey) log.warn('KAISHA_API_KEY não definida: a API de status vai recusar todos os envios até você definir uma.');
 
-const db = openDb(config.dataDir);
-const clients = new Set();
+const MAIN = config.mainFloor;
+const db = openDb(config.dataDir, { mainFloor: MAIN });
+const clients = new Set(); // { res, floor }
 
 // ---------- tempo real ----------
 const send = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-const broadcast = (event, data) => { for (const res of clients) send(res, event, data); };
+// cada painel aberto escuta um andar; floor null = todos
+const broadcast = (floor, event, data) => { for (const c of clients) if (floor == null || c.floor === floor) send(c.res, event, data); };
 
 // junta atualizações do mesmo agente que chegam em rajada (no máximo 4 envios por segundo)
 const pendentes = new Map();
 let flushTimer = null;
-let placarMudou = false;
+const placarMudou = new Set();
 const queueAgent = (agent, comResultado = false) => {
-  pendentes.set(agent.id, agent);
-  if (comResultado) placarMudou = true;
+  pendentes.set(agent.floor + '\u0000' + agent.id, agent);
+  if (comResultado) placarMudou.add(agent.floor);
   if (!flushTimer) flushTimer = setTimeout(() => {
-    flushTimer = null; const lote = [...pendentes.values()]; pendentes.clear(); broadcast('agents', lote);
-    if (placarMudou) { placarMudou = false; broadcast('score', placarHoje()); }
+    flushTimer = null;
+    const porAndar = new Map();
+    for (const a of pendentes.values()) { if (!porAndar.has(a.floor)) porAndar.set(a.floor, []); porAndar.get(a.floor).push(a); }
+    pendentes.clear();
+    for (const [floor, lote] of porAndar) broadcast(floor, 'agents', lote);
+    for (const floor of placarMudou) broadcast(floor, 'score', placarHoje(floor));
+    placarMudou.clear();
   }, 250);
 };
 
@@ -43,11 +51,23 @@ function inicioDoDia(now = Date.now()) {
   const desvio = local - f('UTC');
   return Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()) - desvio;
 }
-const placarHoje = () => ({ ...db.score(inicioDoDia()), since: inicioDoDia() });
+const placarHoje = (floor) => ({ ...db.score(floor, inicioDoDia()), since: inicioDoDia() });
 let diaAtual = inicioDoDia();
-setInterval(() => { const d = inicioDoDia(); if (d !== diaAtual) { diaAtual = d; broadcast('score', placarHoje()); } }, 60000).unref();
+setInterval(() => { const d = inicioDoDia(); if (d !== diaAtual) { diaAtual = d; for (const f of floors.ids()) broadcast(f, 'score', placarHoje(f)); } }, 60000).unref();
 
-const office = createOfficeStore({ dataDir: config.dataDir, tz: config.tz, log, onChange: (snap) => broadcast('office', snap) });
+const floors = createFloors({
+  dataDir: config.dataDir, tz: config.tz, log, mainId: MAIN,
+  onChange: (floor, snap) => broadcast(floor, 'office', snap),
+  onList: (lista) => broadcast(null, 'floors', lista),
+});
+floors.seed(config.seedFloors, db);
+// agentes que estavam no andar principal mas agora estão declarados em outro andar mudam junto
+for (const id of db.ids(MAIN)) {
+  if (floors.get(MAIN).snapshot().office.agents.some((a) => a.id === id)) continue;
+  const destino = floors.floorOfAgent(id);
+  if (destino && destino !== MAIN && db.move(id, MAIN, destino)) log.info(`agente "${id}" levado para o andar "${destino}"`);
+}
+const floorDaChave = (env) => floors.ids().find((f) => f.toUpperCase().replace(/-/g, '_') === env.toUpperCase());
 
 // ---------- utilidades ----------
 const safeEq = (a, b) => {
@@ -69,12 +89,20 @@ const readBody = (req, limit = 256 * 1024) => new Promise((resolve, reject) => {
   req.on('error', reject);
 });
 
-// quem envia status: header "apikey" (configurável) com o token, como na Evolution API
-const canWrite = (req) => !!config.apiKey && safeEq(req.headers[config.apiKeyHeader] || '', config.apiKey);
+// quem envia status: header "apikey" (configurável) com o token, como na Evolution API.
+// KAISHA_API_KEY vale para todos os andares; KAISHA_API_KEY_<ANDAR> só para o próprio andar.
+function quemEscreve(req) {
+  const k = req.headers[config.apiKeyHeader] || '';
+  if (!k) return null;
+  if (config.apiKey && safeEq(k, config.apiKey)) return { master: true, floor: null };
+  for (const fk of config.floorKeys) if (safeEq(k, fk.key)) { const floor = floorDaChave(fk.env); if (floor) return { master: false, floor }; }
+  return null;
+}
+const canWrite = (req, floor) => { const q = quemEscreve(req); return !!q && (q.master || (floor != null && q.floor === floor)); };
 // quem vê o painel: livre, ou senha (Basic) se VIEW_PASSWORD estiver definida; a apikey também abre
 const canView = (req) => {
   if (!config.viewPassword) return true;
-  if (canWrite(req)) return true;
+  if (quemEscreve(req)) return true;
   const h = String(req.headers.authorization || '');
   if (!h.startsWith('Basic ')) return false;
   const senha = Buffer.from(h.slice(6), 'base64').toString('utf8').split(':').slice(1).join(':');
@@ -96,9 +124,10 @@ function parseEvent(b) {
   const brutoRes = b.outcome ?? b.resultado;
   const outcome = brutoRes == null || brutoRes === '' ? null : RES[String(brutoRes).trim().toLowerCase()];
   if (brutoRes != null && brutoRes !== '' && !outcome) return { erro: 'outcome: use success, question ou error' };
+  const floor = String(b.floor ?? b.andar ?? '').trim().toLowerCase() || null;
   return {
     ev: {
-      agent, status,
+      floor, agent, status,
       task: clip(b.task ?? b.tarefa, 200),
       queue: queue == null || queue === '' ? null : Math.max(0, Math.round(Number(queue)) || 0),
       progress: progress == null || progress === '' ? null : Math.min(1, Math.max(0, Number(progress) || 0)),
@@ -137,15 +166,34 @@ const server = http.createServer(async (req, res) => {
   try {
     if (p === '/healthz') return json(res, 200, { ok: true, version: VERSION });
 
+    const andarPedido = (url.searchParams.get('andar') || url.searchParams.get('floor') || '').trim().toLowerCase() || null;
+    const semAndar = (res2, f) => json(res2, 404, { erro: `andar "${f}" não existe`, andares: floors.list().map((x) => x.id) });
+    const negado = () => json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido para este andar` });
+
     // escrita: só com a apikey
     if (req.method === 'POST' && (p === '/api/events' || p === '/api/heartbeat' || p === '/api/reload')) {
-      if (!canWrite(req)) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
-      if (p === '/api/reload') { office.reload(); return json(res, 200, { ok: true }); }
+      const quem = quemEscreve(req);
+      if (!quem) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
+      if (p === '/api/reload') {
+        const alvo = andarPedido || quem.floor;
+        if (alvo && !floors.has(alvo)) return semAndar(res, alvo);
+        if (!quem.master && alvo !== quem.floor) return negado();
+        for (const f of alvo ? [alvo] : floors.ids()) floors.get(f).reload();
+        return json(res, 200, { ok: true });
+      }
       const body = await readBody(req);
+      // em qual andar: o pedido diz; senão o andar da chave; senão onde o agente está declarado; senão o principal
+      const andarDe = (pedido, agente) => pedido || andarPedido || quem.floor || floors.floorOfAgent(agente) || MAIN;
+      const pode = (f) => quem.master || f === quem.floor;
       if (p === '/api/heartbeat') {
         const ids = Array.isArray(body.agents) ? body.agents : [body.agent ?? body.agente];
+        const pedido = String(body.floor ?? body.andar ?? '').trim().toLowerCase() || null;
         const out = [];
-        for (const id of ids.map((x) => String(x || '').trim()).filter(Boolean)) { const a = db.heartbeat(id); if (a) { out.push(a); queueAgent(a); } }
+        for (const id of ids.map((x) => String(x || '').trim()).filter(Boolean)) {
+          const f = andarDe(pedido, id);
+          if (!floors.has(f) || !pode(f)) continue;
+          const a = db.heartbeat(f, id); if (a) { out.push(a); queueAgent(a); }
+        }
         return json(res, 200, { ok: true, agents: out.length });
       }
       const lista = Array.isArray(body) ? body : Array.isArray(body.events) ? body.events : [body];
@@ -154,24 +202,40 @@ const server = http.createServer(async (req, res) => {
       lista.forEach((b, i) => {
         const { ev, erro } = parseEvent(b || {});
         if (erro) { erros.push({ index: i, erro }); return; }
-        const a = db.record(ev);
+        const f = andarDe(ev.floor, ev.agent);
+        if (!floors.has(f)) { erros.push({ index: i, erro: `andar "${f}" não existe` }); return; }
+        if (!pode(f)) { erros.push({ index: i, erro: `esta chave não escreve no andar "${f}"` }); return; }
+        const a = db.record(f, ev);
         ok.push(a); queueAgent(a, !!ev.outcome);
       });
       return json(res, erros.length && !ok.length ? 400 : 200, { ok: ok.length, erros });
     }
-    // editor do painel: confere a chave e grava o escritório
-    if (p === '/api/auth' && req.method === 'GET') return canWrite(req) ? json(res, 200, { ok: true }) : json(res, 401, { erro: 'chave inválida' });
+    // editor do painel: confere a chave e grava o escritório (cria o andar se ainda não existir, só com a chave geral)
+    if (p === '/api/auth' && req.method === 'GET') {
+      const quem = quemEscreve(req);
+      const f = andarPedido || MAIN;
+      return quem && (quem.master || quem.floor === f) ? json(res, 200, { ok: true, master: quem.master }) : json(res, 401, { erro: 'chave inválida' });
+    }
     if (p === '/api/office' && req.method === 'PUT') {
-      if (!canWrite(req)) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
+      const f = andarPedido || MAIN;
       const body = await readBody(req, 512 * 1024);
-      const r = office.save(body);
+      if (!floors.has(f)) {
+        const quem = quemEscreve(req);
+        if (!quem || !quem.master) return negado();
+        const r = floors.create(f, body);
+        return r.erros.length ? json(res, 400, { erros: r.erros }) : json(res, 201, { ok: true, andar: f });
+      }
+      if (!canWrite(req, f)) return negado();
+      const r = floors.get(f).save(body);
+      if (!r.erros.length) broadcast(null, 'floors', floors.list());
       return r.erros.length ? json(res, 400, { erros: r.erros }) : json(res, 200, { ok: true });
     }
     if (req.method === 'DELETE' && p.startsWith('/api/agents/')) {
-      if (!canWrite(req)) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
+      const f = andarPedido || MAIN;
+      if (!canWrite(req, f)) return negado();
       const id = decodeURIComponent(p.slice('/api/agents/'.length));
-      const n = db.remove(id);
-      broadcast('removed', { id });
+      const n = db.remove(f, id);
+      broadcast(f, 'removed', { id });
       return json(res, 200, { ok: n > 0 });
     }
 
@@ -179,19 +243,23 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { erro: 'método não permitido' });
     if (!canView(req)) return askPassword(res);
 
-    if (p === '/api/state') return json(res, 200, { agents: db.state(), score: placarHoje(), ...office.snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
-    if (p === '/api/office') return json(res, 200, office.snapshot());
+    const andar = andarPedido || MAIN;
+    if (p === '/api/floors') return json(res, 200, { main: MAIN, floors: floors.list() });
+    if (p.startsWith('/api/') && !floors.has(andar)) return semAndar(res, andar);
+    if (p === '/api/state') return json(res, 200, { floor: andar, floors: floors.list(), agents: db.state(andar), score: placarHoje(andar), ...floors.get(andar).snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
+    if (p === '/api/office') return json(res, 200, floors.get(andar).snapshot());
     if (p.startsWith('/api/agents/') && p.endsWith('/history')) {
       const id = decodeURIComponent(p.slice('/api/agents/'.length, -'/history'.length));
       const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
-      return json(res, 200, { agent: db.get(id), history: db.history(id, limit) });
+      return json(res, 200, { agent: db.get(andar, id), history: db.history(andar, id, limit) });
     }
     if (p === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       res.write('retry: 3000\n\n');
-      send(res, 'hello', { serverTime: Date.now(), version: VERSION });
-      clients.add(res);
-      req.on('close', () => clients.delete(res));
+      send(res, 'hello', { serverTime: Date.now(), version: VERSION, floor: andar });
+      const c = { res, floor: andar };
+      clients.add(c);
+      req.on('close', () => clients.delete(c));
       return;
     }
     return serveStatic(req, res, p);
@@ -203,7 +271,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 // mantém as conexões ao vivo abertas atrás de proxies (Cloudflare, Traefik do EasyPanel)
-setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 20000).unref();
+setInterval(() => { for (const c of clients) c.res.write(': ping\n\n'); }, 20000).unref();
 // status com prazo vencido voltam para "livre"
 setInterval(() => { for (const a of db.expire()) queueAgent(a); }, 2000).unref();
 // agentes sem sinal viram offline
@@ -211,5 +279,5 @@ setInterval(() => { for (const a of db.sweepOffline(Date.now() - config.offlineA
 // limpa histórico antigo uma vez por hora
 setInterval(() => { const n = db.prune(Date.now() - config.historyDays * 86400000); if (n) log.info(`histórico: ${n} eventos antigos apagados`); }, 3600000).unref();
 
-server.listen(config.port, config.host, () => log.info(`Kaisha ${VERSION} ouvindo em http://${config.host}:${config.port} (dados em ${config.dataDir})`));
+server.listen(config.port, config.host, () => log.info(`Kaisha ${VERSION} ouvindo em http://${config.host}:${config.port} (dados em ${config.dataDir}; andares: ${floors.list().map((f) => f.id).join(', ')})`));
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { server.close(); process.exit(0); });

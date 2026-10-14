@@ -57,6 +57,7 @@ curl -X POST https://kaisha.seudominio.com/api/events \
 | `ttl` | não | segundos até o agente voltar sozinho para `idle` (bom para tarefas curtas: uma chamada só) |
 | `outcome` | não | resultado da tarefa: `success` (o agente pula e solta confete), `question` (levanta a mão com um "?") ou `error` (nuvem com raios). Também aceita `sucesso`, `pergunta` e `erro` |
 | `meta` | não | objeto livre, aparece no histórico |
+| `andar` | não | em qual andar (escritório) o agente está; veja [Andares](#andares-várias-empresas-no-mesmo-kaisha) |
 
 A autenticação é o header `apikey`, no mesmo padrão da Evolution API. Um agente que não está no `office.yaml` aparece na sala **Sem mesa**. Sem sinal por 15 minutos (`OFFLINE_AFTER`), o agente vira *offline* sozinho; em tarefas longas, mande `POST /api/heartbeat`.
 
@@ -93,6 +94,18 @@ As chaves podem ser em português ou inglês (`salas`/`rooms`, `agentes`/`agents
 
 **Resultado das tarefas**: mande `outcome` no fim da tarefa. Sucesso vira pulinhos, confete e um café; pergunta deixa a mão levantada com "?" (use com `status: waiting`); erro põe uma nuvem com raios na cabeça (use com `status: error`) e o agente com `inspetor: true` vai até a mesa investigar. O placar do dia (✓ ? ⛈) aparece no quadro da parede e zera à meia-noite.
 
+## Andares (várias empresas no mesmo Kaisha)
+
+Cada andar é um escritório separado, com planta, agentes, placar do dia e chave próprios. Quando há mais de um, aparecem abas no topo do painel (`?andar=nef` abre direto um andar).
+
+- O andar principal é o `/data/office.yaml` (id `principal`, ou o de `KAISHA_ANDAR_PRINCIPAL`).
+- Os outros são arquivos em `/data/andares/<id>.yaml`, no mesmo formato. Dá para criar copiando um arquivo para lá, pelo botão **Novo andar** do editor (com a chave geral) ou com `KAISHA_ANDARES=nef,consultorio`, que cria os andares que faltam a partir de [`examples/andares`](examples/andares). Nesse caso, os agentes do exemplo que estavam no andar principal mudam de andar junto com o histórico.
+- `ordem: 1` no arquivo define a posição da aba.
+
+**Em qual andar cai um status**: o campo `andar` (ou `?andar=` no endereço) manda. Sem ele, vale o andar da chave; depois, o andar onde o agente está declarado (o principal primeiro); por fim, o principal. Assim, mover um agente de andar no YAML basta: os fluxos não precisam mudar. O mesmo id pode existir em andares diferentes (cada empresa com o seu `caixa`); nesse caso, mande o `andar`.
+
+**Chaves por andar**: `KAISHA_API_KEY` vale para todos. `KAISHA_API_KEY_NEF` só escreve no andar `nef` (o id em maiúsculas, com `-` virando `_`). Use uma chave por empresa: quem tem a chave da NEF não mexe no escritório do consultório.
+
 **Móveis**: `estante`, `planta`, `relogio`, `janela`, `quadro` (kanban), `grafico`, `bebedouro`, `arquivo`, `sofa`, `mesa_reuniao`, `impressora`, `tapete`, `cafe`.
 **Cores dos bonecos**: `vermelho`, `laranja`, `amarelo`, `verde`, `azul`, `roxo`, `rosa`, `cinza`, `preto`, `branco`.
 
@@ -116,6 +129,9 @@ Datas móveis (Carnaval, Páscoa, Black Friday) são calculadas a cada ano. Para
 | `HISTORY_DAYS` | `30` | dias de histórico guardados |
 | `TZ` | `America/Sao_Paulo` | fuso dos temas e horários |
 | `KAISHA_LANG` | `pt-BR` | idioma da interface (`pt-BR` ou `en`) |
+| `KAISHA_ANDARES` | vazio | andares para criar a partir de `examples/andares` (ex.: `nef,consultorio`) |
+| `KAISHA_API_KEY_<ANDAR>` | vazio | chave que só escreve naquele andar (ex.: `KAISHA_API_KEY_NEF`) |
+| `KAISHA_ANDAR_PRINCIPAL` | `principal` | id do andar do `office.yaml` |
 | `PORT` | `3000` | porta HTTP |
 
 **Segurança**: o painel mostra as tarefas dos agentes, que podem conter nomes de clientes. Se o domínio for público, use `VIEW_PASSWORD` ou um proxy com login (Cloudflare Access, por exemplo). A `apikey` só permite escrever status.
@@ -124,11 +140,13 @@ Datas móveis (Carnaval, Páscoa, Black Friday) são calculadas a cada ano. Para
 
 | Rota | Acesso | |
 | --- | --- | --- |
-| `POST /api/events` | apikey | um evento, uma lista, ou `{ "events": [...] }` (até 100) |
+| `POST /api/events` | apikey | um evento, uma lista, ou `{ "events": [...] }` (até 100); `andar` opcional |
 | `POST /api/heartbeat` | apikey | `{ "agent": "id" }` ou `{ "agents": [...] }` |
 | `DELETE /api/agents/:id` | apikey | tira o agente do escritório |
 | `POST /api/reload` | apikey | força a releitura do `office.yaml` |
-| `GET /api/state` | painel | estado de todos os agentes + escritório + tema |
+| `PUT /api/office?andar=` | apikey | grava o escritório do andar (cria o andar, com a chave geral) |
+| `GET /api/floors` | painel | lista de andares |
+| `GET /api/state` | painel | estado de todos os agentes + escritório + tema (`?andar=`) |
 | `GET /api/agents/:id/history` | painel | últimos eventos (`?limit=50`) |
 | `GET /api/stream` | painel | atualizações ao vivo (Server-Sent Events) |
 | `GET /healthz` | livre | verificação de saúde |

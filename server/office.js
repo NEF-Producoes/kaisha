@@ -16,7 +16,7 @@ const ALIAS = {
   datas_especiais: 'special_days', data: 'date', calendario: 'calendar', calendário: 'calendar', periodo: 'period', período: 'period',
   de: 'from', ate: 'to', até: 'to', enfeites: 'decorations', ponto: 'at', efeito: 'effect', desenhos: 'sprites',
   paleta: 'palette', pixels: 'pixels', cabelo: 'hair', pele: 'skin', roupa: 'shirt', idioma: 'lang', titulo: 'title', título: 'title',
-  movel: 'movable', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
+  movel: 'movable', ordem: 'order', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
 };
 const norm = (v) => {
   if (Array.isArray(v)) return v.map(norm);
@@ -66,6 +66,7 @@ export function validateOffice(raw) {
       calendar: String(o.calendar || 'br'),
       lang: o.lang ? String(o.lang) : null,
       // planta aberta: um salão só, salas separadas por divisórias com passagens
+      order: isNum(Number(o.order)) && o.order !== null && o.order !== '' ? Number(o.order) : null, // posição na lista de andares
       plan: ['aberta', 'aberto', 'open', 'integrada'].includes(String(o.plan || '').toLowerCase()) ? 'open' : 'rooms',
       rooms: rooms.map((r) => ({ id: String(r.id), name: String(r.name ?? r.id), area: r.area, floor: r.floor || 'madeira', wall: r.wall || 'clara' })),
       agents: agents.map((a) => ({
@@ -163,10 +164,11 @@ function loadThemesFrom(dir, origem, out, erros) {
   }
 }
 
-export function createOfficeStore({ dataDir, tz, onChange, log = console }) {
-  const officeFile = path.join(dataDir, 'office.yaml');
+// Um escritório (andar) lido de um arquivo YAML. O andar principal é o /data/office.yaml;
+// os outros ficam em /data/andares/<id>.yaml (veja floors.js).
+export function createOfficeStore({ dataDir, officeFile = path.join(dataDir, 'office.yaml'), tz, onChange, log = console, rotulo = 'office.yaml' }) {
   const userThemes = path.join(dataDir, 'themes');
-  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(path.dirname(officeFile), { recursive: true });
   if (!fs.existsSync(officeFile)) {
     // KAISHA_EXAMPLE escolhe qual exemplo vira o primeiro office.yaml (ex.: musashi)
     const nome = String(process.env.KAISHA_EXAMPLE || 'office').replace(/[^\w-]/g, '');
@@ -181,18 +183,18 @@ export function createOfficeStore({ dataDir, tz, onChange, log = console }) {
     let office = state.office;
     try {
       const { erros: e, office: o } = validateOffice(YAML.parse(fs.readFileSync(officeFile, 'utf8')));
-      if (e.length) erros.push(...e.map((x) => 'office.yaml: ' + x));
+      if (e.length) erros.push(...e.map((x) => rotulo + ': ' + x));
       else office = o;
     } catch (e) {
-      erros.push('office.yaml: ' + e.message.split('\n')[0]);
+      erros.push(rotulo + ': ' + e.message.split('\n')[0]);
     }
     const themes = new Map();
     loadThemesFrom(BUILTIN_THEMES, 'kaisha', themes, erros);
     loadThemesFrom(userThemes, 'usuario', themes, erros); // temas do usuário sobrescrevem os de mesmo nome
     if (!office) office = validateOffice({ rooms: [{ id: 'sala', area: [0, 0, 12, 8] }] }).office;
     state = { office, themes, erros, version: state.version + 1 };
-    if (erros.length) log.warn?.(`[${motivo}] ${erros.join(' | ')}`);
-    else log.info?.(`[${motivo}] escritório "${office.name}" carregado (${office.rooms.length} salas, ${office.agents.length} agentes, ${themes.size} temas)`);
+    if (erros.length) log.warn?.(`[${rotulo} · ${motivo}] ${erros.join(' | ')}`);
+    else log.info?.(`[${rotulo} · ${motivo}] escritório "${office.name}" carregado (${office.rooms.length} salas, ${office.agents.length} agentes, ${themes.size} temas)`);
     onChange?.(snapshot());
   };
 
@@ -219,10 +221,12 @@ export function createOfficeStore({ dataDir, tz, onChange, log = console }) {
     return partes.join('|');
   };
   let ultima = '';
-  setInterval(() => { const a = assinatura(); if (a !== ultima) { const primeira = !ultima; ultima = a; if (!primeira) reload('arquivo alterado'); } }, 1000).unref();
+  const t1 = setInterval(() => { const a = assinatura(); if (a !== ultima) { const primeira = !ultima; ultima = a; if (!primeira && fs.existsSync(officeFile)) reload('arquivo alterado'); } }, 1000);
+  t1.unref();
   // garante a troca de tema na virada do dia mesmo sem alteração de arquivo
   let ultimoDia = todayParts(tz).mmdd;
-  setInterval(() => { const d = todayParts(tz).mmdd; if (d !== ultimoDia) { ultimoDia = d; onChange?.(snapshot()); } }, 60000).unref();
+  const t2 = setInterval(() => { const d = todayParts(tz).mmdd; if (d !== ultimoDia) { ultimoDia = d; onChange?.(snapshot()); } }, 60000);
+  t2.unref();
 
   reload('início');
   ultima = assinatura();
@@ -237,7 +241,8 @@ export function createOfficeStore({ dataDir, tz, onChange, log = console }) {
     return { erros: [] };
   };
 
-  return { snapshot, reload: () => reload('manual'), save };
+  const close = () => { clearInterval(t1); clearInterval(t2); };
+  return { snapshot, reload: () => reload('manual'), save, close, file: officeFile };
 }
 
 // escreve o office.yaml em português, uma linha por sala, agente e móvel
@@ -246,6 +251,7 @@ export function toYaml(o) {
   const dados = limpa({
     nome: o.name,
     tema: o.theme,
+    ordem: o.order ?? null,
     planta: o.plan === 'open' ? 'aberta' : null,
     calendario: o.calendar && o.calendar !== 'br' ? o.calendar : null,
     idioma: o.lang,

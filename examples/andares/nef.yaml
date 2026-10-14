@@ -1,0 +1,30 @@
+# Andar da NEF Produções: o módulo de CRM e Financeiro.
+# Os fluxos da NEF mandam status com "andar": "nef" (ou com a chave KAISHA_API_KEY_NEF, que só escreve aqui).
+nome: NEF Produções
+ordem: 1
+tema: auto
+planta: aberta
+salas:
+  - { id: crm,        nome: CRM,        area: [0, 0, 12, 8],  piso: carpete_verde }
+  - { id: financeiro, nome: Financeiro, area: [12, 0, 12, 8], piso: madeira }
+  - { id: copa,       nome: Copa,       area: [0, 8, 12, 6],  piso: ladrilho }
+  - { id: reuniao,    nome: Reunião,    area: [12, 8, 12, 6], piso: madeira_escura }
+agentes:
+  - { id: cadastro,   nome: Cadastro,   cargo: CRM e Asaas, sala: crm,        mesa: [2, 4],  cor: laranja }
+  - { id: prontuario, nome: Prontuário, cargo: Clientes,    sala: crm,        mesa: [7, 4],  cor: rosa }
+  - { id: caixa,      nome: Caixa,      cargo: Faturamento, sala: financeiro, mesa: [16, 4], cor: verde }
+moveis:
+  - { tipo: janela,  pos: [2, 0] }
+  - { tipo: quadro,  pos: [9, 0] }
+  - { tipo: grafico, pos: [13, 0] }
+  - { tipo: relogio, pos: [23, 0] }
+  - { tipo: janela,  pos: [20, 0] }
+  - { tipo: arquivo, pos: [10, 5] }
+  - { tipo: estante, pos: [21, 2] }
+  - { tipo: impressora, pos: [20, 6] }
+  - { tipo: cafe,      pos: [1, 9] }
+  - { tipo: bebedouro, pos: [3, 9] }
+  - { tipo: sofa,      pos: [6, 12] }
+  - { tipo: planta,    pos: [10, 9] }
+  - { tipo: mesa_reuniao, pos: [16, 10] }
+  - { tipo: planta,       pos: [22, 12] }
