@@ -144,6 +144,32 @@ function parseEvent(b) {
   };
 }
 
+// visitas: { dia: "2026-10-14", visitas: [{ id, nome, inicio, fim, agente, online }] }
+// nome curto (iniciais, de preferência): o painel pode estar aberto para outras pessoas
+function parseVisitas(b) {
+  const dia = String(b.dia ?? b.date ?? b.day ?? '').trim() || hojeISO();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return { erro: 'dia: use AAAA-MM-DD' };
+  const bruto = b.visitas ?? b.visits;
+  if (!Array.isArray(bruto)) return { erro: 'visitas: lista obrigatória (pode ser vazia)' };
+  if (bruto.length > 200) return { erro: 'no máximo 200 visitas por dia' };
+  const lista = [];
+  for (const [i, v] of bruto.entries()) {
+    const id = String(v.id ?? '').trim().slice(0, 128);
+    const inicio = Date.parse(v.inicio ?? v.start), fim = Date.parse(v.fim ?? v.end);
+    if (!id) return { erro: `visita #${i + 1}: id obrigatório` };
+    if (!Number.isFinite(inicio) || !Number.isFinite(fim) || fim <= inicio) return { erro: `visita "${id}": inicio e fim em ISO 8601, com fim depois do início` };
+    lista.push({
+      id, inicio, fim,
+      nome: clip(String(v.nome ?? v.name ?? '').trim() || '•', 40),
+      agente: v.agente ?? v.agent ? String(v.agente ?? v.agent).trim().slice(0, 64) : null,
+      online: v.online === true || v.online === 'sim',
+    });
+  }
+  return { dia, lista };
+}
+const hojeISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: config.tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const visitasHoje = (f) => { const d = inicioDoDia(); return db.visits(f, d, d + 86400000); };
+
 // ---------- arquivos estáticos ----------
 const WEB = path.join(ROOT, 'web');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
@@ -216,6 +242,27 @@ const server = http.createServer(async (req, res) => {
       });
       return json(res, erros.length && !ok.length ? 400 : 200, { ok: ok.length, erros });
     }
+    // visitas do dia (pacientes, clientes): substitui a lista inteira daquele dia no andar
+    if (req.method === 'POST' && p === '/api/visits') {
+      const quem = quemEscreve(req);
+      if (!quem) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
+      const body = await readBody(req);
+      const f = String(body.floor ?? body.andar ?? '').trim().toLowerCase() || andarPedido || quem.floor || MAIN;
+      if (!floors.has(f)) return semAndar(res, f);
+      if (!quem.master && quem.floor !== f) return negado();
+      const r = parseVisitas(body);
+      if (r.erro) return json(res, 400, { erro: r.erro });
+      const sumiram = db.setVisits(f, r.dia, r.lista);
+      // a lista de visitas também é sinal de vida de quem atende (aparece como livre se ainda não existia)
+      for (const ag of new Set(r.lista.map((v) => v.agente).filter(Boolean))) {
+        const a = db.heartbeat(f, ag) || db.record(f, { agent: ag, status: 'idle' });
+        queueAgent(a);
+      }
+      // atendimento cancelado no meio: o agente fica livre
+      for (const v of sumiram) if (v.agente) queueAgent(db.record(f, { agent: v.agente, status: 'idle' }));
+      broadcast(f, 'visits', visitasHoje(f));
+      return json(res, 200, { ok: true, andar: f, dia: r.dia, visitas: r.lista.length });
+    }
     // editor do painel: confere a chave e grava o escritório (cria o andar se ainda não existir, só com a chave geral)
     if (p === '/api/auth' && req.method === 'GET') {
       const quem = quemEscreve(req);
@@ -252,7 +299,7 @@ const server = http.createServer(async (req, res) => {
     const andar = andarPedido || MAIN;
     if (p === '/api/floors') return json(res, 200, { main: MAIN, floors: floors.list() });
     if (p.startsWith('/api/') && !floors.has(andar)) return semAndar(res, andar);
-    if (p === '/api/state') return json(res, 200, { floor: andar, floors: floors.list(), agents: db.state(andar), score: placarHoje(andar), ...floors.get(andar).snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
+    if (p === '/api/state') return json(res, 200, { floor: andar, floors: floors.list(), agents: db.state(andar), visits: visitasHoje(andar), score: placarHoje(andar), ...floors.get(andar).snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
     if (p === '/api/office') return json(res, 200, floors.get(andar).snapshot());
     if (p.startsWith('/api/agents/') && p.endsWith('/history')) {
       const id = decodeURIComponent(p.slice('/api/agents/'.length, -'/history'.length));
@@ -280,6 +327,33 @@ const server = http.createServer(async (req, res) => {
 setInterval(() => { for (const c of clients) c.res.write(': ping\n\n'); }, 20000).unref();
 // status com prazo vencido voltam para "livre"
 setInterval(() => { for (const a of db.expire()) queueAgent(a); }, 2000).unref();
+// visitas: no horário marcado o agente atende (status working até o fim); no fim, volta livre com sucesso
+function cuidarDasVisitas() {
+  const now = Date.now();
+  // quem está atendendo não vira offline no meio da consulta
+  for (const r of db.attending()) db.heartbeat(r.floor, r.agente, now);
+  for (const v of db.dueVisits(now)) {
+    if (!floors.has(v.floor)) continue;
+    const quem = v.nome;
+    if (v.estado == null && now < v.fim) {
+      db.markVisit(v.floor, v.id, 'atendendo');
+      if (v.agente) queueAgent(db.record(v.floor, { agent: v.agente, status: 'working', task: (v.online ? 'Teleconsulta · ' : 'Atendendo ') + quem, ttl: Math.ceil((v.fim - now) / 1000) + 5, meta: { visita: v.id } }));
+      broadcast(v.floor, 'visits', visitasHoje(v.floor));
+    } else {
+      db.markVisit(v.floor, v.id, 'concluida');
+      // só comemora se a visita foi acompanhada (estava em atendimento)
+      if (v.estado === 'atendendo' && v.agente) {
+        const outra = db.attendingFor(v.floor, v.agente).find((x) => x.fim > now);
+        // outro paciente ainda em atendimento com o mesmo agente (horários sobrepostos): continua trabalhando
+        if (outra) queueAgent(db.record(v.floor, { agent: v.agente, status: 'working', task: (outra.online ? 'Teleconsulta · ' : 'Atendendo ') + outra.nome, ttl: Math.ceil((outra.fim - now) / 1000) + 5, outcome: 'success', meta: { visita: outra.id } }), true);
+        else queueAgent(db.record(v.floor, { agent: v.agente, status: 'idle', task: 'Atendimento concluído · ' + quem, outcome: 'success' }), true);
+      }
+      broadcast(v.floor, 'visits', visitasHoje(v.floor));
+    }
+  }
+}
+setInterval(cuidarDasVisitas, 5000).unref();
+setInterval(() => db.pruneVisits(Date.now() - 3 * 86400000), 3600000).unref();
 // agentes sem sinal viram offline
 setInterval(() => { for (const a of db.sweepOffline(Date.now() - config.offlineAfterMs)) queueAgent(a); }, 30000).unref();
 // limpa histórico antigo uma vez por hora

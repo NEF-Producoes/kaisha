@@ -61,6 +61,18 @@ export function openDb(dataDir, { mainFloor = 'principal' } = {}) {
         outcome TEXT,
         floor TEXT
       );
+      CREATE TABLE IF NOT EXISTS visits (
+        floor TEXT NOT NULL,
+        id TEXT NOT NULL,
+        dia TEXT NOT NULL,
+        nome TEXT NOT NULL,
+        inicio INTEGER NOT NULL,
+        fim INTEGER NOT NULL,
+        agente TEXT,
+        online INTEGER NOT NULL DEFAULT 0,
+        estado TEXT,
+        PRIMARY KEY (floor, id)
+      );
       DROP INDEX IF EXISTS events_agent_at;
       CREATE INDEX IF NOT EXISTS events_floor_agent_at ON events (floor, agent, at DESC);
     `);
@@ -87,6 +99,19 @@ export function openDb(dataDir, { mainFloor = 'principal' } = {}) {
   const ids = db.prepare('SELECT id FROM agents WHERE floor = ?');
   const moveAgent = db.prepare('UPDATE agents SET floor = ? WHERE floor = ? AND id = ?');
   const moveEvents = db.prepare('UPDATE events SET floor = ? WHERE floor = ? AND agent = ?');
+
+  // visitas (pacientes, clientes): chegam numa sala de espera e são atendidas por um agente no horário marcado
+  const visitasDoDia = db.prepare('SELECT * FROM visits WHERE floor = ? AND dia = ?');
+  const apagaVisita = db.prepare('DELETE FROM visits WHERE floor = ? AND id = ?');
+  const gravaVisita = db.prepare(`INSERT INTO visits (floor, id, dia, nome, inicio, fim, agente, online, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(floor, id) DO UPDATE SET dia = excluded.dia, nome = excluded.nome, inicio = excluded.inicio, fim = excluded.fim, agente = excluded.agente, online = excluded.online`);
+  const visitasJanela = db.prepare('SELECT * FROM visits WHERE floor = ? AND fim >= ? AND inicio < ? ORDER BY inicio');
+  const visitasAtivas = db.prepare("SELECT * FROM visits WHERE (estado IS NULL AND inicio <= ?) OR (estado = 'atendendo' AND fim <= ?)");
+  const marcaVisita = db.prepare('UPDATE visits SET estado = ? WHERE floor = ? AND id = ?');
+  const emAtendimento = db.prepare("SELECT DISTINCT floor, agente FROM visits WHERE estado = 'atendendo' AND agente IS NOT NULL");
+  const atendendoPor = db.prepare("SELECT * FROM visits WHERE floor = ? AND agente = ? AND estado = 'atendendo' ORDER BY fim DESC");
+  const podaVisitas = db.prepare('DELETE FROM visits WHERE fim < ?');
+  const visita = (r) => ({ id: r.id, nome: r.nome, inicio: r.inicio, fim: r.fim, agente: r.agente, online: !!r.online, estado: r.estado ?? null });
 
   const row = (r) => r && ({
     floor: r.floor, id: r.id, status: r.status, task: r.task ?? null, queue: r.queue ?? null, progress: r.progress ?? null,
@@ -137,6 +162,26 @@ export function openDb(dataDir, { mainFloor = 'principal' } = {}) {
       moveAgent.run(para, de, agent); moveEvents.run(para, de, agent);
       return true;
     },
+    // troca as visitas de um dia inteiro; devolve as que estavam em atendimento e sumiram (canceladas)
+    setVisits(floor, dia, lista) {
+      const antes = new Map(visitasDoDia.all(floor, dia).map((r) => [r.id, r]));
+      const novos = new Set(lista.map((v) => v.id));
+      const sumiram = [];
+      db.exec('BEGIN');
+      try {
+        for (const [id, r] of antes) if (!novos.has(id)) { apagaVisita.run(floor, id); if (r.estado === 'atendendo') sumiram.push(visita(r)); }
+        for (const v of lista) gravaVisita.run(floor, v.id, dia, v.nome, v.inicio, v.fim, v.agente ?? null, v.online ? 1 : 0, null);
+        db.exec('COMMIT');
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+      return sumiram;
+    },
+    visits(floor, de, ate) { return visitasJanela.all(floor, de, ate).map(visita); },
+    // visitas que começaram (sem estado) ou terminaram (em atendimento) até agora
+    dueVisits(now = Date.now()) { return visitasAtivas.all(now, now).map((r) => ({ floor: r.floor, ...visita(r) })); },
+    attendingFor(floor, agente) { return atendendoPor.all(floor, agente).map(visita); },
+    attending() { return emAtendimento.all(); },
+    markVisit(floor, id, estado) { marcaVisita.run(estado, floor, id); },
+    pruneVisits(before) { return podaVisitas.run(before).changes; },
     prune(before) { return prune.run(before).changes; },
     remove(floor, agent) { return remove.run(floor, agent).changes; },
   };

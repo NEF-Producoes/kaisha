@@ -42,6 +42,8 @@ Config keys work in English or Portuguese (`rooms`/`salas`, `agents`/`agentes`, 
 
 **Floors** (several companies in one Kaisha): each floor is a separate office with its own plan, agents, daily scoreboard and key, shown as tabs at the top (`?andar=<id>`). The main floor is `/data/office.yaml`; the others are `/data/andares/<id>.yaml`. Create them by dropping a file there, with **New floor** in the editor (main key) or with `KAISHA_ANDARES=nef,clinic`, which copies `examples/andares/<id>.yaml` and moves those agents out of the main floor. An event goes to the floor in its `andar` field, else the key's floor, else the floor where the agent is declared, else the main one. `KAISHA_API_KEY` writes to every floor; `KAISHA_API_KEY_NEF` only to floor `nef`.
 
+**Visits** (patients, customers): give a room `type: waiting` and `POST /api/visits` with `{ andar, dia, visitas: [{ id, nome, inicio, fim, agente, online }] }` (replaces the whole day). Visitors arrive 15 minutes early, sit in the waiting room, walk to the agent's desk at the start time and leave at the end; the agent shows as working during the visit and scores a ✓ when it ends. `online: true` visits only keep the agent busy. Send short names (initials): the dashboard may be seen by others.
+
 ## Themes
 
 Themes live in `themes/<id>/theme.yaml` (or `/data/themes/` for your own). Fixed or movable dates (Easter, Carnival, Black Friday), decorations placed on walls, ceilings, corners, desks and heads, sprites drawn as text, and effects (`snow`, `confetti`, `leaves`). See [CONTRIBUTING](CONTRIBUTING.md).

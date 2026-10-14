@@ -33,6 +33,8 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .overlay { position: absolute; inset: 0; pointer-events: none; }
 .overlay > * { position: absolute; transform: translate(-50%, 0); pointer-events: auto; }
 .room-name { transform: translate(-50%, 0); background: #2a2e37; color: #f2efe6; font: 700 calc(4px * var(--s)) / 1.2 var(--pixel); padding: calc(1px * var(--s)) calc(3px * var(--s)); border-radius: 3px; letter-spacing: .08em; white-space: nowrap; pointer-events: none; box-shadow: 0 1px 0 rgb(0 0 0 / .3); }
+.visit-tag { transform: translate(-50%, -100%); background: rgb(242 239 230 / .92); color: #2a2e37; font: 700 calc(3px * var(--s)) / 1.2 var(--pixel); padding: 0 calc(1.5px * var(--s)); border-radius: 3px; letter-spacing: .06em; white-space: nowrap; pointer-events: none; }
+.visit-tag[data-fase="consulta"] { background: rgb(79 208 122 / .92); }
 .plate { display: flex; flex-direction: column; align-items: center; gap: 0; min-width: calc(30px * var(--s)); max-width: calc(46px * var(--s)); padding: calc(1px * var(--s)) calc(3px * var(--s)); background: rgb(22 25 31 / .92); border: 1px solid #3a3f4b; border-radius: 4px; color: var(--text); cursor: pointer; font: 600 calc(3.4px * var(--s)) / 1.25 var(--pixel); text-align: center; position: absolute; overflow: hidden; }
 .plate::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--p, 0) * 100%); background: var(--working); }
 .plate:hover, .plate:focus-visible { border-color: #6b7380; outline: none; }

@@ -68,7 +68,11 @@ export function validateOffice(raw) {
       // planta aberta: um salão só, salas separadas por divisórias com passagens
       order: isNum(Number(o.order)) && o.order !== null && o.order !== '' ? Number(o.order) : null, // posição na lista de andares
       plan: ['aberta', 'aberto', 'open', 'integrada'].includes(String(o.plan || '').toLowerCase()) ? 'open' : 'rooms',
-      rooms: rooms.map((r) => ({ id: String(r.id), name: String(r.name ?? r.id), area: r.area, floor: r.floor || 'madeira', wall: r.wall || 'clara' })),
+      rooms: rooms.map((r) => ({
+        id: String(r.id), name: String(r.name ?? r.id), area: r.area, floor: r.floor || 'madeira', wall: r.wall || 'clara',
+        // sala de espera: onde as visitas (pacientes, clientes) aguardam até a hora marcada
+        kind: ['espera', 'waiting', 'sala_de_espera', 'recepcao_espera'].includes(String(r.type ?? r.kind ?? '').toLowerCase()) ? 'waiting' : null,
+      })),
       agents: agents.map((a) => ({
         id: String(a.id), name: String(a.name ?? a.id), role: a.role ? String(a.role) : '', room: a.room ? String(a.room) : null,
         desk: pair(a.desk) ? a.desk : null, color: a.color || null, hair: a.hair || null, skin: a.skin || null, shirt: a.shirt || null,
@@ -255,7 +259,7 @@ export function toYaml(o) {
     planta: o.plan === 'open' ? 'aberta' : null,
     calendario: o.calendar && o.calendar !== 'br' ? o.calendar : null,
     idioma: o.lang,
-    salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null })),
+    salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null })),
     agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null })),
     moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
     datas_especiais: o.special_days && o.special_days.length ? o.special_days.map((d) => limpa({ data: d.date, nome: d.name, tema: d.theme, mensagem: d.message })) : null,

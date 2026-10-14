@@ -94,6 +94,24 @@ As chaves podem ser em português ou inglês (`salas`/`rooms`, `agentes`/`agents
 
 **Resultado das tarefas**: mande `outcome` no fim da tarefa. Sucesso vira pulinhos, confete e um café; pergunta deixa a mão levantada com "?" (use com `status: waiting`); erro põe uma nuvem com raios na cabeça (use com `status: error`) e o agente com `inspetor: true` vai até a mesa investigar. O placar do dia (✓ ? ⛈) aparece no quadro da parede e zera à meia-noite.
 
+## Visitas (pacientes, clientes)
+
+Um andar pode receber visitas com hora marcada, como os pacientes de um consultório. Basta ter uma sala com `tipo: espera` (ou a opção **Sala de espera** no editor) e mandar a lista do dia:
+
+```bash
+curl -X POST https://kaisha.seudominio.com/api/visits \
+  -H "apikey: $KAISHA_API_KEY" -H "content-type: application/json" \
+  -d '{"andar":"consultorio","dia":"2026-10-14","visitas":[
+        {"id":"evt123","nome":"A.R.C.","inicio":"2026-10-14T09:30:00-03:00","fim":"2026-10-14T10:15:00-03:00","agente":"dra_erika"},
+        {"id":"evt456","nome":"P.F.F.","inicio":"2026-10-14T10:30:00-03:00","fim":"2026-10-14T11:15:00-03:00","agente":"dra_erika","online":true}]}'
+```
+
+- A lista substitui a do dia inteiro, então dá para reenviar sempre que a agenda mudar (uma consulta desmarcada some da tela).
+- A visita chega 15 minutos antes, senta no sofá da sala de espera e, no horário marcado, vai até a mesa do `agente`. Ela fica lá até o `fim` e depois sai pela porta.
+- Durante a visita o agente fica *executando* ("Atendendo A.R.C."). No fim, volta livre e conta um ✓ no placar. O próprio Kaisha faz isso no horário; ninguém precisa mandar status.
+- Com `online: true` a visita não aparece; só o agente atende ("Teleconsulta · …").
+- O painel pode ser aberto por outras pessoas: use um nome curto, como as iniciais, e nunca mande dado sensível.
+
 ## Andares (várias empresas no mesmo Kaisha)
 
 Cada andar é um escritório separado, com planta, agentes, placar do dia e chave próprios. Quando há mais de um, aparecem abas no topo do painel (`?andar=nef` abre direto um andar).
@@ -144,6 +162,7 @@ Datas móveis (Carnaval, Páscoa, Black Friday) são calculadas a cada ano. Para
 | `POST /api/heartbeat` | apikey | `{ "agent": "id" }` ou `{ "agents": [...] }` |
 | `DELETE /api/agents/:id` | apikey | tira o agente do escritório |
 | `POST /api/reload` | apikey | força a releitura do `office.yaml` |
+| `POST /api/visits` | apikey | visitas do dia de um andar (`dia`, `visitas`, `andar`) |
 | `PUT /api/office?andar=` | apikey | grava o escritório do andar (cria o andar, com a chave geral) |
 | `GET /api/floors` | painel | lista de andares |
 | `GET /api/state` | painel | estado de todos os agentes + escritório + tema (`?andar=`) |

@@ -1,30 +1,35 @@
-# Andar do consultório da Dra. Erika Tavares: CRM e Financeiro da clínica (mesmo contrato da NEF).
-# Ainda sem agentes: crie pelo ✎ Editar (aba Agentes) quando os fluxos do consultório existirem.
-# Os fluxos mandam "andar": "consultorio" (ou usam a chave KAISHA_API_KEY_CONSULTORIO, que só escreve aqui).
-# LGPD: o texto da tarefa aparece na tela. Não mande nome de paciente nem dado clínico, só o tipo de tarefa
-# ("cadastro de paciente novo", "pagamento recebido").
+# Andar do consultório da Dra. Erika Tavares.
+# Os pacientes do dia chegam pela agenda (POST /api/visits com "andar": "consultorio"): esperam na sala de espera
+# e são atendidos pela Dra. Erika no horário marcado, pelo tempo do evento. Teleconsulta: só a Dra. Erika aparece atendendo.
+# LGPD: o painel mostra só as iniciais do paciente. Não mande nome completo nem dado clínico para o Kaisha.
 nome: Consultório Dra. Erika
 ordem: 2
 tema: auto
 planta: aberta
 salas:
-  - { id: recepcao,   nome: Recepção,   area: [0, 0, 12, 8],  piso: madeira }
-  - { id: financeiro, nome: Financeiro, area: [12, 0, 12, 8], piso: carpete_azul }
-  - { id: espera,     nome: Sala de espera, area: [0, 8, 12, 6], piso: ladrilho }
-  - { id: arquivo,    nome: Arquivo,    area: [12, 8, 12, 6], piso: xadrez, parede: escura }
-agentes: []
+  - { id: recepcao,    nome: Recepção,       area: [0, 0, 12, 8],  piso: madeira }
+  - { id: consultorio, nome: Consultório,    area: [12, 0, 12, 8], piso: carpete_azul }
+  - { id: espera,      nome: Sala de espera, tipo: espera, area: [0, 8, 12, 7], piso: ladrilho }
+  - { id: financeiro,  nome: Financeiro,     area: [12, 8, 12, 7], piso: xadrez, parede: escura }
+agentes:
+  - { id: dra_erika,  nome: Dra. Erika, cargo: Neurologista, sala: consultorio, mesa: [17, 4], cor: branco }
+  - { id: secretaria, nome: Secretária, cargo: Agenda,       sala: recepcao,    mesa: [5, 4],  cor: rosa }
 moveis:
   - { tipo: janela,  pos: [1, 0] }
-  - { tipo: quadro,  pos: [9, 0] }
-  - { tipo: grafico, pos: [13, 0] }
-  - { tipo: relogio, pos: [23, 0] }
-  - { tipo: janela,  pos: [20, 0] }
-  - { tipo: planta,  pos: [10, 6] }
-  - { tipo: impressora, pos: [20, 6] }
-  - { tipo: sofa,      pos: [2, 11] }
-  - { tipo: sofa,      pos: [6, 11] }
+  - { tipo: quadro,  pos: [8, 0] }
+  - { tipo: relogio, pos: [11, 0] }
+  - { tipo: janela,  pos: [13, 0] }
+  - { tipo: estante, pos: [21, 2] }
+  - { tipo: planta,  pos: [22, 6] }
+  - { tipo: planta,  pos: [13, 6] }
+  - { tipo: arquivo, pos: [1, 5] }
+  - { tipo: impressora, pos: [9, 5] }
+  - { tipo: sofa,      pos: [1, 10] }
+  - { tipo: sofa,      pos: [4, 10] }
+  - { tipo: sofa,      pos: [7, 10] }
   - { tipo: bebedouro, pos: [10, 9] }
-  - { tipo: planta,    pos: [1, 9] }
+  - { tipo: planta,    pos: [0, 13] }
   - { tipo: arquivo,   pos: [14, 10] }
-  - { tipo: arquivo,   pos: [17, 10] }
-  - { tipo: estante,   pos: [20, 9] }
+  - { tipo: arquivo,   pos: [16, 10] }
+  - { tipo: grafico,   pos: [20, 10] }
+  - { tipo: cafe,      pos: [22, 10] }

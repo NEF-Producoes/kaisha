@@ -157,6 +157,7 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
             campo('Piso', escolha(r.floor, PISOS.map((p) => [p, p.replace('_', ' ')]), (v) => { r.floor = v; mudou(); })),
             campo('Parede', escolha(r.wall || 'clara', PAREDES.map((p) => [p, p]), (v) => { r.wall = v; mudou(); }))),
           el('div', { class: 'ed-row four' }, campo('Coluna', area(0)), campo('Linha', area(1)), campo('Largura', area(2)), campo('Altura', area(3))),
+          marca(r.kind === 'waiting', 'Sala de espera (visitas aguardam aqui)', (v) => { r.kind = v ? 'waiting' : null; mudou(); }),
           el('button', { class: 'btn danger', type: 'button', disabled: o.rooms.length <= 1, onclick: (e) => { e.stopPropagation(); o.rooms.splice(i, 1); sel = null; mudou(); render(); } }, 'Remover sala')));
       });
     }

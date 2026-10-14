@@ -8,14 +8,14 @@ const I18N = {
     queue: (n) => `${n} na fila`, noDesk: 'Sem mesa', history: 'Histórico', close: 'Fechar', updated: 'atualizado',
     connected: 'ao vivo', reconnecting: 'reconectando…', noHistory: 'Sem eventos ainda.', configError: 'Erro na configuração',
     ago: (s) => (s < 60 ? 'agora' : s < 3600 ? `há ${Math.floor(s / 60)} min` : s < 86400 ? `há ${Math.floor(s / 3600)} h` : `há ${Math.floor(s / 86400)} d`),
-    theme: 'Tema', agents: 'agentes', today: 'HOJE', success: 'Sucesso', question: 'Pergunta',
+    theme: 'Tema', agents: 'agentes', today: 'HOJE', success: 'Sucesso', question: 'Pergunta', inWaiting: 'na espera',
   },
   en: {
     working: 'Working', waiting: 'Waiting', idle: 'Idle', error: 'Error', offline: 'Offline',
     queue: (n) => `${n} queued`, noDesk: 'No desk', history: 'History', close: 'Close', updated: 'updated',
     connected: 'live', reconnecting: 'reconnecting…', noHistory: 'No events yet.', configError: 'Configuration error',
     ago: (s) => (s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`),
-    theme: 'Theme', agents: 'agents', today: 'TODAY', success: 'Success', question: 'Question',
+    theme: 'Theme', agents: 'agents', today: 'TODAY', success: 'Success', question: 'Question', inWaiting: 'waiting room',
   },
 };
 let L = I18N['pt-BR'];
@@ -45,6 +45,9 @@ const state = {
   burst: [],           // confete das comemorações
   flash: new Map(),    // balão "✓ feito" que aparece por alguns segundos
   score: null,         // placar do dia
+  visits: [],          // visitas do dia (pacientes, clientes) vindas do servidor
+  visitas: new Map(),  // id -> boneco da visita andando pelo escritório
+  visitasProntas: false, // depois do primeiro quadro, quem chega entra pela porta (antes disso já aparece no lugar)
   selected: null,
 };
 
@@ -469,6 +472,152 @@ function atualizar(dt) {
   }
 }
 
+// ---------- visitas (pacientes, clientes) ----------
+// chegam CHEGADA antes do horário, esperam sentadas na sala de espera, no horário vão até a mesa de quem atende
+// e ficam lá até o fim; depois saem pela porta da sala de espera. Visitas online não aparecem (só o agente atende).
+const CHEGADA = 15 * 60000, SAIDA = 90000;
+function lugaresDeVisita() {
+  if (state.lugaresVisita) return state.lugaresVisita;
+  const { W, H, walk, floor, comp } = state.nav;
+  const rooms = state.layout.rooms;
+  const ri = rooms.findIndex((r) => r.kind === 'waiting');
+  const out = { ok: ri >= 0, entrada: -1, assentos: [], emPe: [], spot: new Map() };
+  state.lugaresVisita = out;
+  if (ri < 0) return out;
+  const r = rooms[ri];
+  const tiles = [];
+  for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (x < W && y < H && floor[y * W + x] === ri && walk[y * W + x]) tiles.push(y * W + x);
+  if (!tiles.length) { out.ok = false; return out; }
+  // porta: bloco livre mais embaixo, perto do meio da sala
+  const meio = r.x + r.w / 2;
+  tiles.sort((a, b) => ((b / W) | 0) - ((a / W) | 0) || Math.abs((a % W) - meio) - Math.abs((b % W) - meio));
+  out.entrada = tiles[0];
+  const regiao = comp[out.entrada];
+  // assentos: cada bloco dos sofás da sala de espera, com o bloco da frente livre para chegar
+  for (const f of state.snap.office.furniture || []) {
+    if (furnitureKey(f.type) !== 'sofa') continue;
+    const def = furniture('sofa'); const tw = Math.ceil(def.w / T), th = Math.ceil(def.h / T);
+    for (let dx = 0; dx < tw; dx++) {
+      const x = f.pos[0] + dx, y = f.pos[1];
+      if (floor[y * W + x] !== ri) continue;
+      const frente = (y + th) * W + x;
+      if (y + th < H && walk[frente] && comp[frente] === regiao) out.assentos.push({ frente, px: x * T + 8, py: y * T + 13 });
+    }
+  }
+  // em pé: blocos da sala longe da porta, para quem não achou sofá
+  out.emPe = tiles.filter((i) => comp[i] === regiao && i !== out.entrada).sort((a, b) => hashStr('p' + a) - hashStr('p' + b));
+  // na frente de quem atende: do outro lado da mesa (de frente para o agente) ou ao lado
+  for (const d of state.layout.desks) {
+    const cands = [[d.x, d.y - 2, 'down'], [d.x + 1, d.y - 2, 'down'], [d.x + 2, d.y, 'left'], [d.x - 1, d.y, 'right'], [d.x + 2, d.y + 1, 'left'], [d.x - 1, d.y + 1, 'right']];
+    const oks = cands.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x] && comp[y * W + x] === regiao);
+    if (oks.length) out.spot.set(d.agent.id, oks.map(([x, y, f]) => ({ tile: y * W + x, facing: f })));
+  }
+  return out;
+}
+function faseDaVisita(v, agora) {
+  if (v.online) return null;
+  if (agora < v.inicio - CHEGADA) return null;
+  if (agora < v.inicio) return 'espera';
+  if (agora < v.fim) return 'consulta';
+  if (agora < v.fim + SAIDA) return 'saindo';
+  return null;
+}
+function atualizarVisitas(dt) {
+  const L2 = lugaresDeVisita();
+  if (!L2.ok) { state.visitas.clear(); return; }
+  const agora = Date.now() - state.clockSkew;
+  const lista = [...state.visits].sort((a, b) => a.inicio - b.inicio);
+  const vivas = new Set();
+  // lugares já ocupados continuam com quem está neles (ninguém troca de cadeira quando outro sai)
+  const ocupados = new Set(), naMesa = new Map();
+  for (const v of lista) {
+    const e = state.visitas.get(v.id), fase = faseDaVisita(v, agora);
+    if (!e || !e.lugar) continue;
+    if (fase === 'espera' && e.lugar.tipo !== 's') ocupados.add(e.lugar.chave);
+    if (fase === 'consulta' && e.lugar.tipo === 's') naMesa.set(e.lugar.chave, v.id);
+  }
+  let emPe = 0;
+  for (const v of lista) {
+    const fase = faseDaVisita(v, agora);
+    let e = state.visitas.get(v.id);
+    if (!fase || (fase === 'saindo' && !e)) continue;
+    vivas.add(v.id);
+    // aonde ir
+    let alvo;
+    if (fase === 'espera') {
+      if (e && e.lugar && e.lugar.tipo !== 's') alvo = e.lugar;
+      else {
+        const a = L2.assentos.find((x) => !ocupados.has('a' + x.frente));
+        if (a) alvo = { tipo: 'a', chave: 'a' + a.frente, tile: a.frente, sentar: a };
+        else {
+          let t = L2.emPe[emPe++ % Math.max(1, L2.emPe.length)] ?? L2.entrada;
+          for (let k = 0; ocupados.has('p' + t) && k < L2.emPe.length; k++) t = L2.emPe[emPe++ % L2.emPe.length];
+          alvo = { tipo: 'p', chave: 'p' + t, tile: t, facing: 'down' };
+        }
+        ocupados.add(alvo.chave);
+      }
+    } else if (fase === 'consulta') {
+      if (e && e.lugar && e.lugar.tipo === 's' && naMesa.get(e.lugar.chave) === v.id) alvo = e.lugar;
+      else {
+        const sps = L2.spot.get(v.agente) || [];
+        const sp = sps.find((x) => !naMesa.has('s' + x.tile)) || sps[0];
+        alvo = sp ? { tipo: 's', chave: 's' + sp.tile, tile: sp.tile, facing: sp.facing } : { tipo: 'p', chave: 'p' + L2.entrada, tile: L2.entrada, facing: 'up' };
+        naMesa.set(alvo.chave, v.id);
+      }
+    } else alvo = { tipo: 'x', chave: 'saida', tile: L2.entrada, sair: true };
+    if (!e) {
+      e = { id: v.id, look: agentLook({ id: 'visita:' + v.id }), path: [], step: 0, facing: 'up', alfa: 1, chave: null };
+      const nasce = state.visitasProntas ? L2.entrada : alvo.tile;
+      Object.assign(e, centroBloco(nasce));
+      if (state.visitasProntas) e.alfa = 0;
+      state.visitas.set(v.id, e);
+    }
+    e.v = v; e.fase = fase;
+    e.lugar = alvo;
+    if (e.chave !== alvo.chave) {
+      // quem está no sofá levanta pela frente dele
+      const origem = (e.mode === 'sentado' || e.mode === 'senta') && e.alvo && e.alvo.sentar ? e.alvo.tile : blocoDe(e.x, e.y);
+      e.chave = alvo.chave; e.alvo = alvo;
+      let p = state.visitasProntas || e.mode ? caminho(origem, alvo.tile) : [];
+      if (p && origem !== blocoDe(e.x, e.y)) p = [origem, ...p];
+      if (p && p.length) { e.path = p; e.mode = 'walk'; }
+      else { Object.assign(e, centroBloco(alvo.tile)); e.path = []; chegou(e); }
+    }
+  }
+  // quem saiu da lista (consulta desmarcada) vai embora pela porta
+  for (const [id, e] of state.visitas) if (!vivas.has(id) && e.chave !== 'saida') {
+    const origem = (e.mode === 'sentado' || e.mode === 'senta') && e.alvo && e.alvo.sentar ? e.alvo.tile : blocoDe(e.x, e.y);
+    e.chave = 'saida'; e.alvo = { tile: L2.entrada, sair: true };
+    const p = caminho(origem, L2.entrada);
+    if (p) { e.path = origem !== blocoDe(e.x, e.y) ? [origem, ...p] : p; e.mode = 'walk'; } else e.mode = 'sumindo';
+  }
+  // movimento
+  for (const [id, e] of state.visitas) {
+    if (e.alfa < 1 && e.mode !== 'sumindo') e.alfa = Math.min(1, e.alfa + dt / 600);
+    if (e.mode === 'walk') { if (andar(e, dt, VEL.walk * 1.1)) chegou(e); }
+    else if (e.mode === 'senta') {
+      const a = e.alvo.sentar, dx = a.px - e.x, dy = a.py - e.y, dist = Math.hypot(dx, dy), passo = (VEL.walk * dt) / 1000;
+      if (dist <= passo) { e.x = a.px; e.y = a.py; e.mode = 'sentado'; e.facing = 'down'; } else { e.x += (dx / dist) * passo; e.y += (dy / dist) * passo; e.facing = 'up'; }
+    } else if (e.mode === 'sumindo') { e.alfa -= dt / 600; if (e.alfa <= 0) state.visitas.delete(id); }
+  }
+  state.visitasProntas = true;
+}
+function chegou(e) {
+  const a = e.alvo;
+  if (a.sentar) { e.mode = 'senta'; return; }
+  if (a.sair) { e.mode = 'sumindo'; return; }
+  e.mode = 'parado'; e.facing = a.facing || 'down';
+}
+function desenhaVisita(e) {
+  g.globalAlpha = Math.max(0, Math.min(1, e.alfa));
+  const andando = e.mode === 'walk' || e.mode === 'senta';
+  const fr = andando ? 1 + (Math.floor(e.step / 4) % 2) : 0;
+  const x = Math.round(e.x - 8), y = Math.round(e.y - 20);
+  if (e.mode !== 'sentado') { g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2); }
+  g.drawImage(walkerSprite(e.look, e.facing, fr), x, y);
+  g.globalAlpha = 1;
+}
+
 // ---------- quadro a quadro ----------
 let tick = 0, lastTick = 0, lastT = 0;
 function frame(t) {
@@ -477,6 +626,7 @@ function frame(t) {
   const dt = Math.min(100, lastT ? t - lastT : 16); lastT = t;
   if (t - lastTick > 140) { tick++; lastTick = t; }
   atualizar(dt);
+  atualizarVisitas(dt);
   g.imageSmoothingEnabled = false;
   g.setTransform(state.scale, 0, 0, state.scale, 0, 0);
   g.drawImage(state.staticLayer, 0, 0);
@@ -489,6 +639,7 @@ function frame(t) {
     if (e.mode !== 'seated') desenhos.push({ y: e.desk.y * T + 27, f: () => g.drawImage(emptyChair(), e.desk.x * T + 8, e.desk.y * T + 9) });
     desenhos.push({ y: e.y, f: () => desenhaAgente(e, heads) });
   }
+  for (const v of state.visitas.values()) desenhos.push({ y: v.y, f: () => desenhaVisita(v) });
   desenhos.sort((a, b) => a.y - b.y).forEach((d) => d.f());
   desenhaCorreio(dt);
   desenhaConfete(dt);
@@ -658,8 +809,24 @@ function placeOverlay() {
   moverOverlay();
 }
 // placa, balão e área de clique acompanham o agente
+const tagsVisita = new Map();
+function moverTagsVisita() {
+  const s = state.scale;
+  for (const [id, n] of tagsVisita) if (!state.visitas.has(id) || !overlay.contains(n)) { n.remove(); tagsVisita.delete(id); }
+  for (const [id, e] of state.visitas) {
+    let n = tagsVisita.get(id);
+    if (!n) { n = el('div', 'visit-tag'); overlay.append(n); tagsVisita.set(id, n); }
+    const txt = e.v ? e.v.nome : '';
+    if (n.textContent !== txt) n.textContent = txt;
+    n.style.left = Math.round(e.x) * s + 'px';
+    n.style.top = (Math.round(e.y) - 27) * s + 'px';
+    n.style.opacity = Math.max(0, Math.min(1, e.alfa));
+    n.dataset.fase = e.fase || '';
+  }
+}
 function moverOverlay() {
   if (!state.ents) return;
+  moverTagsVisita();
   const s = state.scale;
   for (const [id, n] of nodes) {
     const e = state.ents.get(id);
@@ -705,7 +872,9 @@ function refreshOverlay() {
     if (a && a.progress != null && st === 'working') n.plate.style.setProperty('--p', a.progress); else n.plate.style.removeProperty('--p');
   }
   mostrarPlacar();
-  $('#counts').textContent = ['working', 'waiting', 'error'].filter((k) => counts[k]).map((k) => `${counts[k]} ${L[k].toLowerCase()}`).join(' · ') || `${nodes.size} ${L.agents}`;
+  const agora = Date.now() - state.clockSkew;
+  const naEspera = state.visits.filter((v) => faseDaVisita(v, agora) === 'espera').length;
+  $('#counts').textContent = [...['working', 'waiting', 'error'].filter((k) => counts[k]).map((k) => `${counts[k]} ${L[k].toLowerCase()}`), naEspera ? `${naEspera} ${L.inWaiting}` : ''].filter(Boolean).join(' · ') || `${nodes.size} ${L.agents}`;
   if (state.selected) fillPanel(state.selected, false);
 }
 
@@ -777,6 +946,8 @@ function applySnapshot(snap) {
 }
 function rebuild() {
   if (!state.snap) return;
+  // a planta mudou: as visitas reaparecem direto no lugar
+  state.lugaresVisita = null; state.visitas.clear(); state.visitasProntas = false;
   buildLayout(); buildStatic(); syncEntities(); buildOverlay(); resize();
 }
 function upsertAgents(list) {
@@ -804,6 +975,7 @@ async function loadState() {
   state.lang = r.lang;
   state.agents = new Map(r.agents.map((a) => [a.id, a]));
   state.score = r.score || null;
+  state.visits = r.visits || [];
   applySnapshot({ version: r.version, office: r.office, erros: r.erros, theme: r.theme, special: r.special, themes: r.themes });
 }
 
@@ -817,6 +989,7 @@ function connect() {
     if (v && '__V__' !== '_' + '_V_' + '_' && v !== '__V__') location.reload();
   });
   es.addEventListener('agents', (e) => upsertAgents(JSON.parse(e.data)));
+  es.addEventListener('visits', (e) => { state.visits = JSON.parse(e.data) || []; refreshOverlay(); });
   es.addEventListener('floors', (e) => mostrarAndares(JSON.parse(e.data)));
   es.addEventListener('score', (e) => { state.score = JSON.parse(e.data); mostrarPlacar(); });
   es.addEventListener('office', (e) => applySnapshot(JSON.parse(e.data)));
