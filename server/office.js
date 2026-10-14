@@ -16,7 +16,7 @@ const ALIAS = {
   datas_especiais: 'special_days', data: 'date', calendario: 'calendar', calendário: 'calendar', periodo: 'period', período: 'period',
   de: 'from', ate: 'to', até: 'to', enfeites: 'decorations', ponto: 'at', efeito: 'effect', desenhos: 'sprites',
   paleta: 'palette', pixels: 'pixels', cabelo: 'hair', pele: 'skin', roupa: 'shirt', idioma: 'lang', titulo: 'title', título: 'title',
-  movel: 'movable', ordem: 'order', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
+  movel: 'movable', ordem: 'order', fica_na_sala: 'stay', na_sala: 'stay', stay_in_room: 'stay', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
 };
 const norm = (v) => {
   if (Array.isArray(v)) return v.map(norm);
@@ -78,6 +78,7 @@ export function validateOffice(raw) {
         desk: pair(a.desk) ? a.desk : null, color: a.color || null, hair: a.hair || null, skin: a.skin || null, shirt: a.shirt || null,
         central: a.central === true || a.central === 'sim', // fica sempre na mesa e distribui as tarefas
         inspector: a.inspector === true || a.inspector === 'sim', // vai até a mesa de quem deu erro
+        stay: a.stay === true || a.stay === 'sim', // quando está livre, anda só dentro da própria sala
       })),
       furniture: furniture.map((f) => ({ type: String(f.type), pos: f.pos, room: f.room ? String(f.room) : null, flip: !!f.flip })),
       special_days: special.map((d) => ({ date: String(d.date), name: String(d.name || ''), theme: d.theme ? String(d.theme) : null, message: d.message ? String(d.message) : null })),
@@ -260,7 +261,7 @@ export function toYaml(o) {
     calendario: o.calendar && o.calendar !== 'br' ? o.calendar : null,
     idioma: o.lang,
     salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null })),
-    agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null })),
+    agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null, fica_na_sala: a.stay || null })),
     moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
     datas_especiais: o.special_days && o.special_days.length ? o.special_days.map((d) => limpa({ data: d.date, nome: d.name, tema: d.theme, mensagem: d.message })) : null,
   });

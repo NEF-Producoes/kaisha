@@ -142,6 +142,7 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
           el('div', { class: 'ed-row' },
             marca(a.central, 'Central (fica na mesa)', (v) => { a.central = v; mudou(); }),
             marca(a.inspector, 'Inspetor de erros', (v) => { a.inspector = v; mudou(); })),
+          marca(a.stay, 'Fica na própria sala (não passeia pelo andar)', (v) => { a.stay = v; mudou(); }),
           el('button', { class: 'btn danger', type: 'button', onclick: (e) => { e.stopPropagation(); o.agents.splice(i, 1); sel = null; mudou(); render(); } }, 'Remover agente')));
       });
     }

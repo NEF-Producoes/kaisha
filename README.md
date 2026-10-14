@@ -88,6 +88,8 @@ datas_especiais:
 
 As chaves podem ser em português ou inglês (`salas`/`rooms`, `agentes`/`agents`…). Um arquivo com erro não derruba nada: o escritório anterior continua e o erro aparece num aviso na tela. Exemplo completo e comentado em [`examples/office.yaml`](examples/office.yaml).
 
+**Ficar na sala** (`fica_na_sala: true` no agente): quando está livre, o agente passeia só dentro da própria sala, em vez do andar inteiro (bom para recepção e consultório).
+
 **Planta aberta** (`planta: aberta`): em vez de salas fechadas, o escritório vira um salão só. Só as áreas encostadas no fundo têm parede; entre as outras entram divisórias baixas com uma passagem no meio de cada divisa. Veja [`examples/musashi.yaml`](examples/musashi.yaml).
 
 **Vida no escritório**: agente livre não fica parado na cadeira. Ele circula pelo escritório e passa no café, no bebedouro e no sofá. Quando chega uma tarefa, o celular dele toca, ele corre até a mesa e senta para trabalhar. Um agente com `central: true` fica sempre na mesa; as tarefas saem dele, num envelope, até quem vai fazer (bom para um orquestrador, como uma recepção).
@@ -107,9 +109,9 @@ curl -X POST https://kaisha.seudominio.com/api/visits \
 ```
 
 - A lista substitui a do dia inteiro, então dá para reenviar sempre que a agenda mudar (uma consulta desmarcada some da tela).
-- A visita chega 15 minutos antes, senta no sofá da sala de espera e, no horário marcado, vai até a mesa do `agente`. Ela fica lá até o `fim` e depois sai pela porta.
+- A próxima visita presencial já fica esperando na sala de espera, mesmo que falte mais tempo; as outras chegam 15 minutos antes. Cada uma senta no sofá e, no horário marcado, entra na sala do `agente` e fica na frente da mesa até o `fim`. Depois sai pela porta.
 - Durante a visita o agente fica *executando* ("Atendendo A.R.C."). No fim, volta livre e conta um ✓ no placar. O próprio Kaisha faz isso no horário; ninguém precisa mandar status.
-- Com `online: true` a visita não aparece; só o agente atende ("Teleconsulta · …").
+- Com `online: true` a visita não entra no escritório: aparece uma janela de vídeo na mesa do agente com a etiqueta "💻 … · online", e o agente fica em "Teleconsulta · …".
 - O painel pode ser aberto por outras pessoas: use um nome curto, como as iniciais, e nunca mande dado sensível.
 
 ## Andares (várias empresas no mesmo Kaisha)

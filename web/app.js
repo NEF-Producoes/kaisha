@@ -47,6 +47,7 @@ const state = {
   score: null,         // placar do dia
   visits: [],          // visitas do dia (pacientes, clientes) vindas do servidor
   visitas: new Map(),  // id -> boneco da visita andando pelo escritório
+  chamadas: new Map(), // teleconsultas em andamento (janela de vídeo na mesa de quem atende)
   visitasProntas: false, // depois do primeiro quadro, quem chega entra pela porta (antes disso já aparece no lugar)
   selected: null,
 };
@@ -315,8 +316,8 @@ function syncEntities() {
       if (d.agent.central || ATIVO.has(st) || seat.entrada < 0) sentar(e);
       else {
         // começa em pé num lugar qualquer da mesma região da mesa
-        const lista = state.nav.comps[state.nav.comp[seat.entrada]] || [seat.entrada];
-        const p = centroBloco(lista[(Math.random() * lista.length) | 0]);
+        const lista = areaDoAgente({ agent: d.agent, seat }, seat.entrada);
+        const p = centroBloco(lista.length ? lista[(Math.random() * lista.length) | 0] : seat.entrada);
         Object.assign(e, { mode: 'pause', x: p.x, y: p.y, timer: rnd(300, 3000) });
       }
     }
@@ -327,6 +328,15 @@ function syncEntities() {
   }
   state.ents = ents;
 }
+// blocos por onde o agente pode passear: a região toda, ou só a própria sala (fica_na_sala)
+function areaDoAgente(e, aqui) {
+  const nav = state.nav;
+  const lista = nav.comps[nav.comp[aqui]] || [];
+  if (!e.agent.stay || e.seat.entrada < 0) return lista;
+  const sala = nav.floor[e.seat.entrada];
+  const dentro = lista.filter((i) => nav.floor[i] === sala);
+  return dentro.length ? dentro : lista;
+}
 function sentar(e) { Object.assign(e, { mode: 'seated', x: e.seat.x, y: e.seat.y, path: [], timer: rnd(1500, 4000) }); }
 function levantar(e) {
   if (e.seat.entrada < 0) return;
@@ -336,9 +346,10 @@ function levantar(e) {
 function passear(e) {
   const nav = state.nav;
   const aqui = blocoDe(e.x, e.y);
-  const lista = nav.comps[nav.comp[aqui]];
-  if (!lista) { e.mode = 'pause'; e.timer = 3000; return; }
-  const pois = nav.pois.filter((i) => nav.comp[i] === nav.comp[aqui]);
+  const lista = areaDoAgente(e, aqui);
+  if (!lista.length) { e.mode = 'pause'; e.timer = 3000; return; }
+  const area = new Set(lista);
+  const pois = nav.pois.filter((i) => area.has(i));
   const alvo = pois.length && Math.random() < 0.4 ? pois[(Math.random() * pois.length) | 0] : lista[(Math.random() * lista.length) | 0];
   const p = caminho(aqui, alvo);
   if (!p || !p.length) { e.mode = 'pause'; e.timer = rnd(1000, 3000); return; }
@@ -382,7 +393,8 @@ function confete(x, y, cor) {
 }
 function irAoCafe(e) {
   const nav = state.nav, aqui = blocoDe(e.x, e.y);
-  const opcoes = nav.cafes.filter((i) => nav.comp[i] === nav.comp[aqui]);
+  const area = new Set(areaDoAgente(e, aqui));
+  const opcoes = nav.cafes.filter((i) => area.has(i));
   const p = opcoes.length ? caminho(aqui, opcoes[(Math.random() * opcoes.length) | 0]) : null;
   if (p && p.length) { e.path = p; e.mode = 'walk'; e.poi = true; } else { e.mode = 'pause'; e.timer = rnd(800, 2000); }
 }
@@ -508,15 +520,24 @@ function lugaresDeVisita() {
   out.emPe = tiles.filter((i) => comp[i] === regiao && i !== out.entrada).sort((a, b) => hashStr('p' + a) - hashStr('p' + b));
   // na frente de quem atende: do outro lado da mesa (de frente para o agente) ou ao lado
   for (const d of state.layout.desks) {
-    const cands = [[d.x, d.y - 2, 'down'], [d.x + 1, d.y - 2, 'down'], [d.x + 2, d.y, 'left'], [d.x - 1, d.y, 'right'], [d.x + 2, d.y + 1, 'left'], [d.x - 1, d.y + 1, 'right']];
-    const oks = cands.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x] && comp[y * W + x] === regiao);
+    // do outro lado da mesa (de frente para o agente), ao lado da mesa, ou ao lado da cadeira: sempre dentro da sala de quem atende
+    const cands = [[d.x, d.y - 2, 'down'], [d.x + 1, d.y - 2, 'down'], [d.x + 2, d.y, 'left'], [d.x - 1, d.y, 'right'], [d.x + 2, d.y - 1, 'left'], [d.x - 1, d.y - 1, 'right'], [d.x + 2, d.y + 1, 'left'], [d.x - 1, d.y + 1, 'right'], [d.x + 3, d.y + 1, 'left'], [d.x - 2, d.y + 1, 'right']];
+    const cad = [[d.x, d.y + 1], [d.x + 1, d.y + 1], [d.x, d.y + 2]].map(([x, y]) => y * W + x).find((i) => i >= 0 && i < W * H && walk[i]);
+    const salaMesa = cad != null ? floor[cad] : -1;
+    const oks = cands.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x] && comp[y * W + x] === regiao && (salaMesa < 0 || floor[y * W + x] === salaMesa));
     if (oks.length) out.spot.set(d.agent.id, oks.map(([x, y, f]) => ({ tile: y * W + x, facing: f })));
   }
   return out;
 }
-function faseDaVisita(v, agora) {
+// o próximo paciente presencial já fica esperando na sala de espera, mesmo que falte mais de 15 min
+function proximaVisita(agora) {
+  let prox = null;
+  for (const v of state.visits) if (!v.online && v.inicio > agora && (!prox || v.inicio < prox.inicio)) prox = v;
+  return prox;
+}
+function faseDaVisita(v, agora, prox = proximaVisita(agora)) {
   if (v.online) return null;
-  if (agora < v.inicio - CHEGADA) return null;
+  if (agora < v.inicio - CHEGADA) return prox && prox.id === v.id ? 'espera' : null;
   if (agora < v.inicio) return 'espera';
   if (agora < v.fim) return 'consulta';
   if (agora < v.fim + SAIDA) return 'saindo';
@@ -524,21 +545,29 @@ function faseDaVisita(v, agora) {
 }
 function atualizarVisitas(dt) {
   const L2 = lugaresDeVisita();
-  if (!L2.ok) { state.visitas.clear(); return; }
+  if (!L2.ok) { state.visitas.clear(); state.chamadas.clear(); return; }
   const agora = Date.now() - state.clockSkew;
   const lista = [...state.visits].sort((a, b) => a.inicio - b.inicio);
+  const prox = proximaVisita(agora);
+  // teleconsulta: uma janela de vídeo aparece na mesa de quem atende
+  state.chamadas.clear();
+  for (const v of lista) {
+    if (!v.online || agora < v.inicio || agora >= v.fim) continue;
+    const ag = state.ents && state.ents.get(v.agente);
+    if (ag) state.chamadas.set('online:' + v.id, { v, x: ag.desk.x * T - 6, y: ag.desk.y * T - 2, alfa: 1, fase: 'online', look: agentLook({ id: 'visita:' + v.id }) });
+  }
   const vivas = new Set();
   // lugares já ocupados continuam com quem está neles (ninguém troca de cadeira quando outro sai)
   const ocupados = new Set(), naMesa = new Map();
   for (const v of lista) {
-    const e = state.visitas.get(v.id), fase = faseDaVisita(v, agora);
+    const e = state.visitas.get(v.id), fase = faseDaVisita(v, agora, prox);
     if (!e || !e.lugar) continue;
     if (fase === 'espera' && e.lugar.tipo !== 's') ocupados.add(e.lugar.chave);
     if (fase === 'consulta' && e.lugar.tipo === 's') naMesa.set(e.lugar.chave, v.id);
   }
   let emPe = 0;
   for (const v of lista) {
-    const fase = faseDaVisita(v, agora);
+    const fase = faseDaVisita(v, agora, prox);
     let e = state.visitas.get(v.id);
     if (!fase || (fase === 'saindo' && !e)) continue;
     vivas.add(v.id);
@@ -602,6 +631,21 @@ function atualizarVisitas(dt) {
   }
   state.visitasProntas = true;
 }
+// janela de videochamada flutuando ao lado do monitor: rosto do paciente e luz de "ao vivo"
+function desenhaChamada(c) {
+  const x = Math.round(c.x) - 8, y = Math.round(c.y) - 12;
+  g.fillStyle = '#1b1f27'; g.fillRect(x - 1, y - 1, 18, 14);
+  g.fillStyle = '#3b6fb6'; g.fillRect(x, y, 16, 12);
+  g.fillStyle = '#5a8fd6'; g.fillRect(x, y, 16, 3);
+  const k = c.look;
+  g.fillStyle = k.shirt[0]; g.fillRect(x + 4, y + 9, 8, 3);
+  g.fillStyle = k.skin; g.fillRect(x + 5, y + 3, 6, 6);
+  g.fillStyle = k.hair; g.fillRect(x + 5, y + 2, 6, 2); g.fillRect(x + 4, y + 3, 1, 3); g.fillRect(x + 11, y + 3, 1, 3);
+  g.fillStyle = '#1b1f27'; g.fillRect(x + 6, y + 5, 1, 1); g.fillRect(x + 9, y + 5, 1, 1);
+  if (tick % 8 < 5) { g.fillStyle = '#ff4d4d'; g.fillRect(x + 13, y + 1, 2, 2); }
+  // fio até o monitor
+  g.fillStyle = 'rgba(27,31,39,0.6)'; g.fillRect(x + 17, y + 12, 6, 1);
+}
 function chegou(e) {
   const a = e.alvo;
   if (a.sentar) { e.mode = 'senta'; return; }
@@ -640,6 +684,7 @@ function frame(t) {
     desenhos.push({ y: e.y, f: () => desenhaAgente(e, heads) });
   }
   for (const v of state.visitas.values()) desenhos.push({ y: v.y, f: () => desenhaVisita(v) });
+  for (const c of state.chamadas.values()) desenhos.push({ y: 1e6, f: () => desenhaChamada(c) });
   desenhos.sort((a, b) => a.y - b.y).forEach((d) => d.f());
   desenhaCorreio(dt);
   desenhaConfete(dt);
@@ -812,14 +857,15 @@ function placeOverlay() {
 const tagsVisita = new Map();
 function moverTagsVisita() {
   const s = state.scale;
-  for (const [id, n] of tagsVisita) if (!state.visitas.has(id) || !overlay.contains(n)) { n.remove(); tagsVisita.delete(id); }
-  for (const [id, e] of state.visitas) {
+  const todos = new Map([...state.visitas, ...state.chamadas]);
+  for (const [id, n] of tagsVisita) if (!todos.has(id) || !overlay.contains(n)) { n.remove(); tagsVisita.delete(id); }
+  for (const [id, e] of todos) {
     let n = tagsVisita.get(id);
     if (!n) { n = el('div', 'visit-tag'); overlay.append(n); tagsVisita.set(id, n); }
-    const txt = e.v ? e.v.nome : '';
+    const txt = e.v ? (e.fase === 'online' ? '💻 ' + e.v.nome + ' · online' : e.v.nome) : '';
     if (n.textContent !== txt) n.textContent = txt;
     n.style.left = Math.round(e.x) * s + 'px';
-    n.style.top = (Math.round(e.y) - 27) * s + 'px';
+    n.style.top = (Math.round(e.y) - (e.fase === 'online' ? 14 : 27)) * s + 'px';
     n.style.opacity = Math.max(0, Math.min(1, e.alfa));
     n.dataset.fase = e.fase || '';
   }
