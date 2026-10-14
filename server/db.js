@@ -29,12 +29,15 @@ export function openDb(dataDir) {
     );
     CREATE INDEX IF NOT EXISTS events_agent_at ON events (agent, at DESC);
   `);
+  // bancos criados antes da versão 0.2 não têm a coluna do tempo de expiração
+  if (!db.prepare('PRAGMA table_info(agents)').all().some((c) => c.name === 'expires_at')) db.exec('ALTER TABLE agents ADD COLUMN expires_at INTEGER');
 
   const upsert = db.prepare(`
-    INSERT INTO agents (id, status, task, queue, progress, meta, updated_at, seen_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, status, task, queue, progress, meta, updated_at, seen_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET status = excluded.status, task = excluded.task, queue = excluded.queue,
-      progress = excluded.progress, meta = excluded.meta, updated_at = excluded.updated_at, seen_at = excluded.seen_at
+      progress = excluded.progress, meta = excluded.meta, updated_at = excluded.updated_at, seen_at = excluded.seen_at,
+      expires_at = excluded.expires_at
   `);
   const insertEvent = db.prepare('INSERT INTO events (agent, status, task, queue, meta, at) VALUES (?, ?, ?, ?, ?, ?)');
   const touch = db.prepare('UPDATE agents SET seen_at = ? WHERE id = ?');
@@ -42,8 +45,9 @@ export function openDb(dataDir) {
   const one = db.prepare('SELECT * FROM agents WHERE id = ?');
   const history = db.prepare('SELECT status, task, queue, meta, at FROM events WHERE agent = ? ORDER BY at DESC, id DESC LIMIT ?');
   const stale = db.prepare("SELECT id FROM agents WHERE status != 'offline' AND seen_at < ?");
-  const setOffline = db.prepare("UPDATE agents SET status = 'offline', task = NULL, queue = NULL, progress = NULL, updated_at = ? WHERE id = ?");
+  const setOffline = db.prepare("UPDATE agents SET status = 'offline', task = NULL, queue = NULL, progress = NULL, expires_at = NULL, updated_at = ? WHERE id = ?");
   const prune = db.prepare('DELETE FROM events WHERE at < ?');
+  const expired = db.prepare('SELECT id FROM agents WHERE expires_at IS NOT NULL AND expires_at <= ?');
   const remove = db.prepare('DELETE FROM agents WHERE id = ?');
 
   const row = (r) => r && ({
@@ -54,7 +58,8 @@ export function openDb(dataDir) {
   return {
     record(ev, now = Date.now()) {
       const meta = ev.meta ? JSON.stringify(ev.meta) : null;
-      upsert.run(ev.agent, ev.status, ev.task ?? null, ev.queue ?? null, ev.progress ?? null, meta, now, now);
+      const expira = ev.ttl ? now + ev.ttl * 1000 : null;
+      upsert.run(ev.agent, ev.status, ev.task ?? null, ev.queue ?? null, ev.progress ?? null, meta, now, now, expira);
       insertEvent.run(ev.agent, ev.status, ev.task ?? null, ev.queue ?? null, meta, now);
       return row(one.get(ev.agent));
     },
@@ -75,6 +80,10 @@ export function openDb(dataDir) {
       const ids = stale.all(olderThan).map((r) => r.id);
       for (const id of ids) { setOffline.run(now, id); insertEvent.run(id, 'offline', null, null, null, now); }
       return ids.map((id) => row(one.get(id)));
+    },
+    // status com prazo (ttl) que venceu: o agente volta a ficar livre
+    expire(now = Date.now()) {
+      return expired.all(now).map((r) => this.record({ agent: r.id, status: 'idle' }, now));
     },
     prune(before) { return prune.run(before).changes; },
     remove(agent) { return remove.run(agent).changes; },

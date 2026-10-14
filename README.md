@@ -52,6 +52,7 @@ curl -X POST https://kaisha.seudominio.com/api/events \
 | `task` | não | texto curto mostrado no balão |
 | `queue` | não | itens na fila ("3 na fila") |
 | `progress` | não | barra de progresso de 0 a 1 |
+| `ttl` | não | segundos até o agente voltar sozinho para `idle` (bom para tarefas curtas: uma chamada só) |
 | `meta` | não | objeto livre, aparece no histórico |
 
 A autenticação é o header `apikey`, no mesmo padrão da Evolution API. Um agente que não está no `office.yaml` aparece na sala **Sem mesa**. Sem sinal por 15 minutos (`OFFLINE_AFTER`), o agente vira *offline* sozinho; em tarefas longas, mande `POST /api/heartbeat`.

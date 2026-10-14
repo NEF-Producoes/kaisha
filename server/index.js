@@ -72,12 +72,14 @@ function parseEvent(b) {
   if (!STATUSES.includes(status)) return { erro: `status: use ${STATUSES.join(', ')}` };
   const queue = b.queue ?? b.fila;
   const progress = b.progress ?? b.progresso;
+  const ttl = b.ttl ?? b.duracao ?? b.duração;
   return {
     ev: {
       agent, status,
       task: clip(b.task ?? b.tarefa, 200),
       queue: queue == null || queue === '' ? null : Math.max(0, Math.round(Number(queue)) || 0),
       progress: progress == null || progress === '' ? null : Math.min(1, Math.max(0, Number(progress) || 0)),
+      ttl: ttl == null || ttl === '' ? null : Math.min(86400, Math.max(1, Math.round(Number(ttl)) || 0)) || null,
       meta: b.meta && typeof b.meta === 'object' && JSON.stringify(b.meta).length <= 4000 ? JSON.parse(JSON.stringify(b.meta)) : null,
     },
   };
@@ -163,6 +165,8 @@ const server = http.createServer(async (req, res) => {
 
 // mantém as conexões ao vivo abertas atrás de proxies (Cloudflare, Traefik do EasyPanel)
 setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 20000).unref();
+// status com prazo vencido voltam para "livre"
+setInterval(() => { for (const a of db.expire()) queueAgent(a); }, 2000).unref();
 // agentes sem sinal viram offline
 setInterval(() => { for (const a of db.sweepOffline(Date.now() - config.offlineAfterMs)) queueAgent(a); }, 30000).unref();
 // limpa histórico antigo uma vez por hora
