@@ -26,10 +26,26 @@ const broadcast = (event, data) => { for (const res of clients) send(res, event,
 // junta atualizações do mesmo agente que chegam em rajada (no máximo 4 envios por segundo)
 const pendentes = new Map();
 let flushTimer = null;
-const queueAgent = (agent) => {
+let placarMudou = false;
+const queueAgent = (agent, comResultado = false) => {
   pendentes.set(agent.id, agent);
-  if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; const lote = [...pendentes.values()]; pendentes.clear(); broadcast('agents', lote); }, 250);
+  if (comResultado) placarMudou = true;
+  if (!flushTimer) flushTimer = setTimeout(() => {
+    flushTimer = null; const lote = [...pendentes.values()]; pendentes.clear(); broadcast('agents', lote);
+    if (placarMudou) { placarMudou = false; broadcast('score', placarHoje()); }
+  }, 250);
 };
+
+// início do dia no fuso do escritório, para o placar zerar à meia-noite local
+function inicioDoDia(now = Date.now()) {
+  const f = (tz) => new Date(new Date(now).toLocaleString('en-US', { timeZone: tz }));
+  const local = f(config.tz);
+  const desvio = local - f('UTC');
+  return Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()) - desvio;
+}
+const placarHoje = () => ({ ...db.score(inicioDoDia()), since: inicioDoDia() });
+let diaAtual = inicioDoDia();
+setInterval(() => { const d = inicioDoDia(); if (d !== diaAtual) { diaAtual = d; broadcast('score', placarHoje()); } }, 60000).unref();
 
 const office = createOfficeStore({ dataDir: config.dataDir, tz: config.tz, log, onChange: (snap) => broadcast('office', snap) });
 
@@ -75,12 +91,18 @@ function parseEvent(b) {
   const queue = b.queue ?? b.fila;
   const progress = b.progress ?? b.progresso;
   const ttl = b.ttl ?? b.duracao ?? b.duração;
+  // resultado da tarefa: sucesso, pergunta (precisa de alguém) ou erro
+  const RES = { success: 'success', sucesso: 'success', ok: 'success', done: 'success', question: 'question', pergunta: 'question', duvida: 'question', dúvida: 'question', error: 'error', erro: 'error', falha: 'error' };
+  const brutoRes = b.outcome ?? b.resultado;
+  const outcome = brutoRes == null || brutoRes === '' ? null : RES[String(brutoRes).trim().toLowerCase()];
+  if (brutoRes != null && brutoRes !== '' && !outcome) return { erro: 'outcome: use success, question ou error' };
   return {
     ev: {
       agent, status,
       task: clip(b.task ?? b.tarefa, 200),
       queue: queue == null || queue === '' ? null : Math.max(0, Math.round(Number(queue)) || 0),
       progress: progress == null || progress === '' ? null : Math.min(1, Math.max(0, Number(progress) || 0)),
+      outcome,
       ttl: ttl == null || ttl === '' ? null : Math.min(86400, Math.max(1, Math.round(Number(ttl)) || 0)) || null,
       meta: b.meta && typeof b.meta === 'object' && JSON.stringify(b.meta).length <= 4000 ? JSON.parse(JSON.stringify(b.meta)) : null,
     },
@@ -133,7 +155,7 @@ const server = http.createServer(async (req, res) => {
         const { ev, erro } = parseEvent(b || {});
         if (erro) { erros.push({ index: i, erro }); return; }
         const a = db.record(ev);
-        ok.push(a); queueAgent(a);
+        ok.push(a); queueAgent(a, !!ev.outcome);
       });
       return json(res, erros.length && !ok.length ? 400 : 200, { ok: ok.length, erros });
     }
@@ -149,7 +171,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { erro: 'método não permitido' });
     if (!canView(req)) return askPassword(res);
 
-    if (p === '/api/state') return json(res, 200, { agents: db.state(), ...office.snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
+    if (p === '/api/state') return json(res, 200, { agents: db.state(), score: placarHoje(), ...office.snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
     if (p === '/api/office') return json(res, 200, office.snapshot());
     if (p.startsWith('/api/agents/') && p.endsWith('/history')) {
       const id = decodeURIComponent(p.slice('/api/agents/'.length, -'/history'.length));

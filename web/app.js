@@ -7,14 +7,14 @@ const I18N = {
     queue: (n) => `${n} na fila`, noDesk: 'Sem mesa', history: 'Histórico', close: 'Fechar', updated: 'atualizado',
     connected: 'ao vivo', reconnecting: 'reconectando…', noHistory: 'Sem eventos ainda.', configError: 'Erro na configuração',
     ago: (s) => (s < 60 ? 'agora' : s < 3600 ? `há ${Math.floor(s / 60)} min` : s < 86400 ? `há ${Math.floor(s / 3600)} h` : `há ${Math.floor(s / 86400)} d`),
-    theme: 'Tema', agents: 'agentes',
+    theme: 'Tema', agents: 'agentes', today: 'HOJE', success: 'Sucesso', question: 'Pergunta',
   },
   en: {
     working: 'Working', waiting: 'Waiting', idle: 'Idle', error: 'Error', offline: 'Offline',
     queue: (n) => `${n} queued`, noDesk: 'No desk', history: 'History', close: 'Close', updated: 'updated',
     connected: 'live', reconnecting: 'reconnecting…', noHistory: 'No events yet.', configError: 'Configuration error',
     ago: (s) => (s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`),
-    theme: 'Theme', agents: 'agents',
+    theme: 'Theme', agents: 'agents', today: 'TODAY', success: 'Success', question: 'Question',
   },
 };
 let L = I18N['pt-BR'];
@@ -38,6 +38,9 @@ const state = {
   particles: [],
   mail: [],            // envelopes voando do agente central até quem recebeu a tarefa
   ents: null,          // posição e movimento de cada agente
+  burst: [],           // confete das comemorações
+  flash: new Map(),    // balão "✓ feito" que aparece por alguns segundos
+  score: null,         // placar do dia
   selected: null,
 };
 
@@ -86,7 +89,7 @@ function buildNav() {
   const walk = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) walk[i] = floor[i] >= 0 ? 1 : 0;
   const block = (x, y) => { if (x >= 0 && y >= 0 && x < W && y < H) walk[y * W + x] = 0; };
-  const pois = [];
+  const pois = [], cafes = [];
   for (const f of state.snap.office.furniture || []) {
     const key = furnitureKey(f.type), def = key && furniture(key);
     if (!def || WALL_FURNITURE.has(key)) continue;
@@ -94,7 +97,7 @@ function buildNav() {
     if (!FLAT_FURNITURE.has(key)) for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) block(f.pos[0] + x, f.pos[1] + y);
     // lugares para onde os agentes gostam de ir quando estão livres
     if (['cafe', 'bebedouro', 'sofa', 'planta', 'estante', 'arquivo', 'impressora', 'mesa_reuniao'].includes(key))
-      for (let x = 0; x < tw; x++) pois.push([f.pos[0] + x, f.pos[1] + th]);
+      for (let x = 0; x < tw; x++) { pois.push([f.pos[0] + x, f.pos[1] + th]); if (key === 'cafe' || key === 'bebedouro') cafes.push([f.pos[0] + x, f.pos[1] + th]); }
   }
   for (const d of desks) for (const dx of [0, 1]) { block(d.x + dx, d.y); block(d.x + dx, d.y - 1); }
   // passagens: em planta aberta, cada divisa entre duas salas ganha uma abertura de 2 blocos no meio
@@ -133,7 +136,8 @@ function buildNav() {
     for (let q = 0; q < lista.length; q++) for (const n of vizinhos(lista[q], W, H)) if (comp[n] < 0 && pass(lista[q], n)) { comp[n] = id; lista.push(n); }
     comps.push(lista);
   }
-  state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x) };
+  state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x),
+    cafes: cafes.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x) };
 }
 function vizinhos(i, W, H) {
   const x = i % W, y = (i / W) | 0, out = [];
@@ -347,7 +351,49 @@ function chamar(e) {
   e.mode = 'ring'; e.path = []; e.timer = voo + 1100; e.facing = 'down';
 }
 
+// ---------- reações ao resultado das tarefas ----------
+// sucesso: pula, solta confete e vai tomar um café
+function comemorar(e, tarefa) {
+  state.flash.set(e.id, { texto: '✓ ' + (tarefa || 'feito'), ate: Date.now() + 4500 });
+  setTimeout(refreshOverlay, 4600);
+  refreshOverlay();
+  if (e.mode === 'celebrate') return; // já está comemorando: uma festa só
+  if (e.mode === 'seated') levantar(e);
+  if (e.seat.entrada < 0 && e.mode === 'seated') return;
+  e.mode = 'celebrate'; e.timer = 2600; e.path = []; e.facing = 'down';
+  confete(e.x, e.y - 14, e.look.shirt[0]);
+}
+function confete(x, y, cor) {
+  const cores = [cor, '#f2c14e', '#4fa66a', '#4a7fd4', '#e26fa6', '#ffffff'];
+  if (state.burst.length > 220) return;
+  for (let i = 0; i < 36; i++) {
+    const a = rnd(-Math.PI, 0), v = rnd(30, 75);
+    state.burst.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 20, c: cores[i % cores.length], vida: rnd(1200, 2000), giro: Math.random() < 0.5 });
+  }
+}
+function irAoCafe(e) {
+  const nav = state.nav, aqui = blocoDe(e.x, e.y);
+  const opcoes = nav.cafes.filter((i) => nav.comp[i] === nav.comp[aqui]);
+  const p = opcoes.length ? caminho(aqui, opcoes[(Math.random() * opcoes.length) | 0]) : null;
+  if (p && p.length) { e.path = p; e.mode = 'walk'; e.poi = true; } else { e.mode = 'pause'; e.timer = rnd(800, 2000); }
+}
+// erro: o inspetor (ex.: Sentinela) vai até a mesa de quem falhou
+function chamarInspetor(alvo) {
+  const insp = [...state.ents.values()].find((x) => x.agent.inspector && x !== alvo);
+  if (!insp || ATIVO.has(statusOf(insp.id)) || insp.mode === 'visit' || insp.mode === 'inspect') return;
+  const { W, walk, comp } = state.nav;
+  const ent = alvo.seat.entrada;
+  if (ent < 0) return;
+  if (insp.mode === 'seated') levantar(insp);
+  const aqui = blocoDe(insp.x, insp.y);
+  const perto = [ent + 2, ent - 1, ent + W, ent + W + 1, ent].filter((i) => i >= 0 && i < walk.length && walk[i] && comp[i] === comp[aqui]);
+  const p = perto.length ? caminho(aqui, perto[0]) : null;
+  if (!p) return;
+  insp.path = p; insp.mode = 'visit'; insp.visita = alvo.id;
+}
+
 function mudouStatus(e, st) {
+  if (st === 'error' && e.last !== 'error' && !e.agent.inspector) chamarInspetor(e);
   if (ATIVO.has(st) && !ATIVO.has(e.last)) {
     if (e.mode !== 'seated' && e.mode !== 'run' && e.mode !== 'ring') chamar(e);
     else if (e.mode === 'seated' && !e.agent.central) {
@@ -357,6 +403,7 @@ function mudouStatus(e, st) {
   }
   if (!ATIVO.has(st) && e.mode === 'seated') e.timer = rnd(1500, 4000);
   if (!ATIVO.has(st) && (e.mode === 'run' || e.mode === 'ring')) { e.mode = 'pause'; e.path = []; e.timer = rnd(500, 1500); }
+  if (ATIVO.has(st) && (e.mode === 'celebrate' || e.mode === 'visit' || e.mode === 'inspect')) chamar(e);
   e.last = st;
 }
 
@@ -393,6 +440,18 @@ function atualizar(dt) {
       case 'ring':
         e.timer -= dt; if (e.timer <= 0) irParaMesa(e);
         break;
+      case 'celebrate':
+        e.timer -= dt; e.step += dt / 1000;
+        if (e.timer <= 0) irAoCafe(e);
+        break;
+      case 'visit':
+        if (ativo) { chamar(e); break; }
+        if (andar(e, dt, VEL.walk * 1.8)) { e.mode = 'inspect'; e.timer = 5000; e.facing = 'up'; }
+        break;
+      case 'inspect':
+        if (ativo) { chamar(e); break; }
+        e.timer -= dt; if (e.timer <= 0) { e.mode = 'pause'; e.timer = rnd(500, 1500); e.visita = null; }
+        break;
       case 'run':
         if (andar(e, dt, VEL.run)) {
           // último trecho: da frente da mesa até a cadeira
@@ -426,6 +485,7 @@ function frame(t) {
   }
   desenhos.sort((a, b) => a.y - b.y).forEach((d) => d.f());
   desenhaCorreio(dt);
+  desenhaConfete(dt);
   drawEffect();
   g.setTransform(1, 0, 0, 1, 0, 0);
   moverOverlay();
@@ -438,18 +498,21 @@ function desenhaAgente(e, heads) {
   if (e.mode === 'seated') {
     const x = e.desk.x * T + 8, y = e.desk.y * T + 9;
     const fr = st === 'working' ? (tick % 2) + 1 : 0;
-    const bob = st === 'idle' && tick % 12 < 6 ? 1 : 0;
+    const bob = st === 'error' ? 1 : st === 'idle' && tick % 12 < 6 ? 1 : 0; // com erro, ombros caídos
     g.drawImage(agentSprite(e.look, fr), x, y + bob);
     topo = y + bob;
-    if (st === 'error' && tick % 4 < 2) { g.fillStyle = '#ff5c5c'; g.fillRect(x + 7, y - 9, 2, 5); g.fillRect(x + 7, y - 3, 2, 2); }
+    if (st === 'waiting') maoLevantada(x, y + bob, e.look);
   } else {
-    const andando = e.mode === 'walk' || e.mode === 'run';
+    const andando = e.mode === 'walk' || e.mode === 'run' || e.mode === 'visit';
     const fr = andando ? 1 + (Math.floor(e.step / (e.mode === 'run' ? 5 : 4)) % 2) : 0;
-    const quica = andando && fr === 1 ? -1 : 0;
+    // comemorando: pulinhos
+    const quica = e.mode === 'celebrate' ? -Math.round(Math.abs(Math.sin(e.step * 7)) * 7) : andando && fr === 1 ? -1 : 0;
     const x = Math.round(e.x - 8), y = Math.round(e.y - 20 + quica);
     g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2);
     g.drawImage(walkerSprite(e.look, e.facing, fr), x, y);
     topo = y;
+    if (e.mode === 'celebrate') bracosParaCima(x, y, e.look);
+    if (e.mode === 'inspect') lupa(Math.round(e.x) + 5, y + 7);
     if (e.mode === 'ring') {
       // celular vibrando acima da cabeça
       const tremor = tick % 2 ? 1 : -1;
@@ -460,7 +523,48 @@ function desenhaAgente(e, heads) {
     if (e.mode === 'run' && tick % 2) { g.fillStyle = 'rgba(255,255,255,0.5)'; const atras = { left: 9, right: -9, up: 0, down: 0 }[e.facing]; g.fillRect(Math.round(e.x) + atras - 1, Math.round(e.y) - 3, 2, 1); }
   }
   for (const h of heads) { const sp = themeSprite(h.sprite); g.drawImage(sp, Math.round(e.mode === 'seated' ? e.desk.x * T + 16 : e.x) - (sp.width >> 1), topo - sp.height + 3); }
+  if (st === 'error') nuvem(e.mode === 'seated' ? e.desk.x * T + 16 : e.x, topo);
   g.globalAlpha = 1;
+}
+
+// nuvem cinza com chuva e raios (erro); acompanha o agente
+function nuvem(cx, topo) {
+  const x = Math.round(cx) - 10, y = topo - 15;
+  const raio = tick % 14 < 2;
+  g.fillStyle = raio ? '#9aa3ad' : '#5d6470';
+  g.fillRect(x + 4, y + 2, 13, 5); g.fillRect(x + 2, y + 4, 17, 4); g.fillRect(x + 7, y, 6, 3); g.fillRect(x + 13, y + 1, 4, 2);
+  g.fillStyle = raio ? '#c7ccd2' : '#7d8590'; g.fillRect(x + 5, y + 2, 5, 2); g.fillRect(x + 8, y + 1, 4, 1);
+  g.fillStyle = '#7fb3ff';
+  for (let i = 0; i < 4; i++) { const dy = (tick * 2 + i * 3) % 7; g.fillRect(x + 4 + i * 4, y + 9 + dy, 1, 2); }
+  if (raio) { g.fillStyle = '#ffe14d'; g.fillRect(x + 11, y + 8, 2, 2); g.fillRect(x + 10, y + 10, 2, 2); g.fillRect(x + 11, y + 12, 2, 2); g.fillRect(x + 10, y + 14, 1, 2); }
+}
+// mão levantada com "?" piscando (esperando o Carlos)
+function maoLevantada(x, y, look) {
+  g.fillStyle = look.shirt[1]; g.fillRect(x + 13, y + 2, 2, 7);
+  g.fillStyle = look.skin; g.fillRect(x + 13, y - 1, 3, 3);
+  if (tick % 6 < 4) {
+    const qx = x + 6, qy = y - 13;
+    g.fillStyle = '#1b1f27'; g.fillRect(qx - 1, qy - 1, 7, 11);
+    g.fillStyle = '#f2c14e';
+    g.fillRect(qx + 1, qy, 3, 1); g.fillRect(qx, qy + 1, 1, 2); g.fillRect(qx + 4, qy + 1, 1, 2); g.fillRect(qx + 3, qy + 3, 1, 1); g.fillRect(qx + 2, qy + 4, 1, 2); g.fillRect(qx + 2, qy + 7, 1, 2);
+  }
+}
+function bracosParaCima(x, y, look) {
+  g.fillStyle = look.shirt[1]; g.fillRect(x + 1, y + 6, 2, 4); g.fillRect(x + 13, y + 6, 2, 4);
+  g.fillStyle = look.skin; g.fillRect(x, y + 3, 3, 3); g.fillRect(x + 13, y + 3, 3, 3);
+}
+function lupa(x, y) {
+  g.fillStyle = '#5a3b24'; g.fillRect(x + 4, y + 4, 2, 4);
+  g.fillStyle = '#c9cdd2'; g.fillRect(x, y - 1, 6, 1); g.fillRect(x, y + 4, 6, 1); g.fillRect(x - 1, y, 1, 4); g.fillRect(x + 6, y, 1, 4);
+  g.fillStyle = 'rgba(183,220,242,0.7)'; g.fillRect(x, y, 6, 4);
+}
+function desenhaConfete(dt) {
+  const k = dt / 1000;
+  state.burst = state.burst.filter((p) => {
+    p.vy += 90 * k; p.vx *= 0.985; p.x += p.vx * k; p.y += p.vy * k; p.vida -= dt;
+    g.fillStyle = p.c; g.fillRect(Math.round(p.x), Math.round(p.y), p.giro && tick % 2 ? 2 : 1, p.giro && tick % 2 ? 1 : 2);
+    return p.vida > 0;
+  });
 }
 
 function desenhaCorreio(dt) {
@@ -527,6 +631,14 @@ function buildOverlay() {
     overlay.append(hit, bubble, plate);
     nodes.set(d.agent.id, { plate, bubble, hit, agent: d.agent, pos: '' });
   }
+  const q = (state.snap.office.furniture || []).find((f) => furnitureKey(f.type) === 'quadro');
+  if (q) {
+    const sb = el('div', 'scoreboard');
+    sb.append(el('span', 'sb-t', L.today), el('span', 'sb-n'));
+    sb.dataset.x = q.pos[0] * T + 16; sb.dataset.y = q.pos[1] * T + 4;
+    sb.classList.add('room-name');
+    overlay.append(sb);
+  }
   placeOverlay(); refreshOverlay();
 }
 function placeOverlay() {
@@ -555,6 +667,14 @@ function moverOverlay() {
     n.plate.classList.toggle('walking', !sentado);
   }
 }
+// placar do dia, pintado sobre o quadro da parede (ou no topo, se não houver quadro)
+function mostrarPlacar() {
+  const sc = state.score;
+  const el2 = overlay.querySelector('.scoreboard');
+  const txt = sc ? [`✓ ${sc.success}`, `? ${sc.question}`, `⛈ ${sc.error}`] : null;
+  if (el2 && txt) { el2.querySelector('.sb-n').innerHTML = txt.map((t, i) => `<span data-k="${['success', 'question', 'error'][i]}">${t}</span>`).join(''); }
+  $('#score').textContent = sc ? `hoje ${sc.success} ✓ · ${sc.question} ? · ${sc.error} ⛈` : '';
+}
 function refreshOverlay() {
   const counts = { working: 0, waiting: 0, idle: 0, error: 0, offline: 0 };
   for (const [id, n] of nodes) {
@@ -565,12 +685,16 @@ function refreshOverlay() {
     const ps = n.plate.querySelector('.plate-status');
     ps.textContent = (L[st] || st) + (st === 'working' || st === 'waiting' ? fila : '');
     n.plate.dataset.status = st;
-    const mostra = a && a.task && (st === 'working' || st === 'waiting' || st === 'error');
-    n.bubble.textContent = mostra ? (a.task.length > 42 ? a.task.slice(0, 41) + '…' : a.task) : '';
+    const fl = state.flash.get(id);
+    const festa = fl && fl.ate > Date.now();
+    const mostra = festa || (a && a.task && (st === 'working' || st === 'waiting' || st === 'error'));
+    const txt = festa ? fl.texto : mostra ? a.task : '';
+    n.bubble.textContent = txt.length > 42 ? txt.slice(0, 41) + '…' : txt;
     n.bubble.hidden = !mostra;
-    n.bubble.dataset.status = st;
+    n.bubble.dataset.status = festa ? 'success' : st;
     if (a && a.progress != null && st === 'working') n.plate.style.setProperty('--p', a.progress); else n.plate.style.removeProperty('--p');
   }
+  mostrarPlacar();
   $('#counts').textContent = ['working', 'waiting', 'error'].filter((k) => counts[k]).map((k) => `${counts[k]} ${L[k].toLowerCase()}`).join(' · ') || `${nodes.size} ${L.agents}`;
   if (state.selected) fillPanel(state.selected, false);
 }
@@ -598,7 +722,7 @@ async function fillPanel(agent, carregar) {
     for (const h of r.history) {
       const li = el('li');
       const when = new Date(h.at).toLocaleString(document.documentElement.lang, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-      li.append(el('span', 'h-when', when), el('span', 'h-status', L[h.status] || h.status), el('span', 'h-task', h.task || ''));
+      li.append(el('span', 'h-when', when), el('span', 'h-status', ({ success: '✓ ', question: '? ', error: '⛈ ' }[h.outcome] || '') + (L[h.status] || h.status)), el('span', 'h-task', h.task || ''));
       li.querySelector('.h-status').dataset.status = h.status;
       ul.append(li);
     }
@@ -631,8 +755,15 @@ function rebuild() {
 }
 function upsertAgents(list) {
   let novo = false;
+  // resultado novo de uma tarefa: comemora (o erro e a pergunta aparecem pelo próprio status)
+  const festas = [];
+  for (const a of list) {
+    const antes = state.agents.get(a.id);
+    if (a.outcome === 'success' && (!antes || antes.updatedAt !== a.updatedAt)) festas.push(a);
+  }
   for (const a of list) { if (!state.agents.has(a.id) && !state.layout?.desks.some((d) => d.agent.id === a.id)) novo = true; state.agents.set(a.id, a); }
   if (novo) rebuild(); else refreshOverlay();
+  for (const a of festas) { const e = state.ents && state.ents.get(a.id); if (e) comemorar(e, a.task); }
 }
 
 async function loadState() {
@@ -641,6 +772,7 @@ async function loadState() {
   state.clockSkew = Date.now() - r.serverTime;
   state.lang = r.lang;
   state.agents = new Map(r.agents.map((a) => [a.id, a]));
+  state.score = r.score || null;
   applySnapshot({ version: r.version, office: r.office, erros: r.erros, theme: r.theme, special: r.special, themes: r.themes });
 }
 
@@ -654,6 +786,7 @@ function connect() {
     if (v && '__V__' !== '_' + '_V_' + '_' && v !== '__V__') location.reload();
   });
   es.addEventListener('agents', (e) => upsertAgents(JSON.parse(e.data)));
+  es.addEventListener('score', (e) => { state.score = JSON.parse(e.data); mostrarPlacar(); });
   es.addEventListener('office', (e) => applySnapshot(JSON.parse(e.data)));
   es.addEventListener('removed', (e) => { state.agents.delete(JSON.parse(e.data).id); rebuild(); });
   let caiu = false;

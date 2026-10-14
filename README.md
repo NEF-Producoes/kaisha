@@ -53,6 +53,7 @@ curl -X POST https://kaisha.seudominio.com/api/events \
 | `queue` | não | itens na fila ("3 na fila") |
 | `progress` | não | barra de progresso de 0 a 1 |
 | `ttl` | não | segundos até o agente voltar sozinho para `idle` (bom para tarefas curtas: uma chamada só) |
+| `outcome` | não | resultado da tarefa: `success` (o agente pula e solta confete), `question` (levanta a mão com um "?") ou `error` (nuvem com raios). Também aceita `sucesso`, `pergunta` e `erro` |
 | `meta` | não | objeto livre, aparece no histórico |
 
 A autenticação é o header `apikey`, no mesmo padrão da Evolution API. Um agente que não está no `office.yaml` aparece na sala **Sem mesa**. Sem sinal por 15 minutos (`OFFLINE_AFTER`), o agente vira *offline* sozinho; em tarefas longas, mande `POST /api/heartbeat`.
@@ -87,6 +88,8 @@ As chaves podem ser em português ou inglês (`salas`/`rooms`, `agentes`/`agents
 **Planta aberta** (`planta: aberta`): em vez de salas fechadas, o escritório vira um salão só. Só as áreas encostadas no fundo têm parede; entre as outras entram divisórias baixas com uma passagem no meio de cada divisa. Veja [`examples/musashi.yaml`](examples/musashi.yaml).
 
 **Vida no escritório**: agente livre não fica parado na cadeira. Ele circula pelo escritório e passa no café, no bebedouro e no sofá. Quando chega uma tarefa, o celular dele toca, ele corre até a mesa e senta para trabalhar. Um agente com `central: true` fica sempre na mesa; as tarefas saem dele, num envelope, até quem vai fazer (bom para um orquestrador, como uma recepção).
+
+**Resultado das tarefas**: mande `outcome` no fim da tarefa. Sucesso vira pulinhos, confete e um café; pergunta deixa a mão levantada com "?" (use com `status: waiting`); erro põe uma nuvem com raios na cabeça (use com `status: error`) e o agente com `inspetor: true` vai até a mesa investigar. O placar do dia (✓ ? ⛈) aparece no quadro da parede e zera à meia-noite.
 
 **Móveis**: `estante`, `planta`, `relogio`, `janela`, `quadro` (kanban), `grafico`, `bebedouro`, `arquivo`, `sofa`, `mesa_reuniao`, `impressora`, `tapete`, `cafe`.
 **Cores dos bonecos**: `vermelho`, `laranja`, `amarelo`, `verde`, `azul`, `roxo`, `rosa`, `cinza`, `preto`, `branco`.

@@ -69,3 +69,13 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .plate.walking[data-status="idle"] .plate-status, .plate.walking[data-status="offline"] .plate-status { display: none; }
 /* nome de sala que não tem parede (planta aberta): pintado no chão */
 .room-name.on-floor { background: rgb(42 46 55 / .55); box-shadow: none; }
+/* balão de tarefa concluída */
+.bubble[data-status="success"] { background: #dff5e3; }
+/* placar do dia sobre o quadro da parede */
+.scoreboard { display: flex; flex-direction: column; align-items: center; gap: calc(.5px * var(--s)); background: #f7f3ea; color: #1b1f27; border: 1px solid #6e472b; padding: calc(1px * var(--s)) calc(2px * var(--s)); pointer-events: none; }
+.scoreboard .sb-t { font-size: calc(3px * var(--s)); letter-spacing: .1em; color: #6e472b; }
+.scoreboard .sb-n { display: flex; gap: calc(2px * var(--s)); font-size: calc(3.6px * var(--s)); }
+.scoreboard [data-k="success"] { color: #2f8a46; }
+.scoreboard [data-k="question"] { color: #b8860b; }
+.scoreboard [data-k="error"] { color: #c0392b; }
+.score { margin-left: 10px; }

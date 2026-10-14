@@ -21,7 +21,7 @@ agentes:
   - { id: cadastro,   nome: Cadastro,   cargo: CRM e Asaas, sala: crm,         mesa: [1, 13],  cor: laranja }
   - { id: prontuario, nome: Prontuário, cargo: Clientes,    sala: crm,         mesa: [4, 13],  cor: rosa }
   - { id: caixa,      nome: Caixa,      cargo: Faturamento, sala: crm,         mesa: [7, 13],  cor: verde }
-  - { id: sentinela,  nome: Sentinela,  cargo: Erros,       sala: supervisao,  mesa: [24, 4],  cor: cinza }
+  - { id: sentinela,  nome: Sentinela,  cargo: Erros,       sala: supervisao,  mesa: [24, 4],  cor: cinza, inspetor: true }
 moveis:
   # paredes (só as áreas encostadas na parede do fundo têm parede)
   - { tipo: quadro,  pos: [2, 0] }

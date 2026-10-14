@@ -30,7 +30,7 @@ curl -X POST https://kaisha.example.com/api/events \
   -d '{"agent":"support","status":"working","task":"Answering Maria","queue":3}'
 ```
 
-`status` is one of `working`, `waiting`, `idle`, `error`, `offline`. Optional: `task`, `queue`, `progress` (0–1), `meta`, `ttl` (seconds until the agent goes back to `idle` on its own, so short tasks need a single call). Authentication is the `apikey` header (same style as Evolution API). Agents not listed in `office.yaml` show up in a **No desk** room. After 15 minutes without a signal (`OFFLINE_AFTER`) an agent goes offline; use `POST /api/heartbeat` for long tasks.
+`status` is one of `working`, `waiting`, `idle`, `error`, `offline`. Optional: `task`, `queue`, `progress` (0–1), `meta`, `ttl` (seconds until the agent goes back to `idle` on its own, so short tasks need a single call), `outcome` (`success`: the agent jumps and throws confetti; `question`: raises a hand with a "?"; `error`: a storm cloud over the head, and the agent marked `inspector: true` walks over to check). A daily scoreboard shows on the wall board. Authentication is the `apikey` header (same style as Evolution API). Agents not listed in `office.yaml` show up in a **No desk** room. After 15 minutes without a signal (`OFFLINE_AFTER`) an agent goes offline; use `POST /api/heartbeat` for long tasks.
 
 Config keys work in English or Portuguese (`rooms`/`salas`, `agents`/`agentes`, `desk`/`mesa`, `furniture`/`moveis`…). See [`examples/office.yaml`](examples/office.yaml), [`examples/curl.md`](examples/curl.md) and the ready-made n8n sub-workflow in [`examples/n8n`](examples/n8n). The full option list (env vars, furniture, API routes) is in the [Portuguese README](README.md#variáveis-de-ambiente).
 
