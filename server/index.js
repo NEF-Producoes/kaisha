@@ -7,6 +7,8 @@ import { config, STATUSES } from './config.js';
 import { openDb } from './db.js';
 import { createOfficeStore, ROOT } from './office.js';
 
+const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+
 const log = {
   info: (...a) => console.log(new Date().toISOString(), ...a),
   warn: (...a) => console.warn(new Date().toISOString(), 'AVISO', ...a),
@@ -104,7 +106,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {
-    if (p === '/healthz') return json(res, 200, { ok: true });
+    if (p === '/healthz') return json(res, 200, { ok: true, version: VERSION });
 
     // escrita: só com a apikey
     if (req.method === 'POST' && (p === '/api/events' || p === '/api/heartbeat' || p === '/api/reload')) {
@@ -172,5 +174,5 @@ setInterval(() => { for (const a of db.sweepOffline(Date.now() - config.offlineA
 // limpa histórico antigo uma vez por hora
 setInterval(() => { const n = db.prune(Date.now() - config.historyDays * 86400000); if (n) log.info(`histórico: ${n} eventos antigos apagados`); }, 3600000).unref();
 
-server.listen(config.port, config.host, () => log.info(`Kaisha ouvindo em http://${config.host}:${config.port} (dados em ${config.dataDir})`));
+server.listen(config.port, config.host, () => log.info(`Kaisha ${VERSION} ouvindo em http://${config.host}:${config.port} (dados em ${config.dataDir})`));
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { server.close(); process.exit(0); });
