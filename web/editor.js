@@ -140,9 +140,12 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
             campo('Cor', escolha(a.color || '', [['', 'automática'], ...CORES.map((c) => [c, c])], (v) => { a.color = v || null; mudou(); })),
             campo('Sala', escolha(a.room || '', [['', '—'], ...o.rooms.map((r) => [r.id, r.name])], (v) => { a.room = v || null; mudou(); }))),
           el('div', { class: 'ed-row' },
-            marca(a.central, 'Central (fica na mesa)', (v) => { a.central = v; mudou(); }),
+            marca(a.central, 'Central (distribui as tarefas)', (v) => { a.central = v; mudou(); }),
             marca(a.inspector, 'Inspetor de erros', (v) => { a.inspector = v; mudou(); })),
-          marca(a.stay, 'Fica na própria sala (não passeia pelo andar)', (v) => { a.stay = v; mudou(); }),
+          el('div', { class: 'ed-row' },
+            marca(a.fixed, 'Fica na mesa', (v) => { a.fixed = v; mudou(); }),
+            marca(a.stay, 'Fica na própria sala', (v) => { a.stay = v; mudou(); })),
+          campo('Cabelo', escolha(a.hairstyle || '', [['', 'automático'], ['short', 'curto'], ['long', 'longo']], (v) => { a.hairstyle = v || null; mudou(); })),
           el('button', { class: 'btn danger', type: 'button', onclick: (e) => { e.stopPropagation(); o.agents.splice(i, 1); sel = null; mudou(); render(); } }, 'Remover agente')));
       });
     }

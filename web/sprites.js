@@ -38,8 +38,10 @@ export function agentLook(a) {
   const shirt = SHIRTS[String(a.color || a.shirt || '').toLowerCase()] || SHIRTS[AUTO[h % AUTO.length]];
   const hair = a.hair && /^#/.test(a.hair) ? a.hair : HAIRS[(h >>> 4) % HAIRS.length];
   const skin = a.skin && /^#/.test(a.skin) ? a.skin : SKINS[(h >>> 8) % SKINS.length];
-  const style = (h >>> 12) % 3;
-  return { shirt, hair, skin, style };
+  const long = a.hairstyle === 'long';
+  // cabelo longo usa a cabeça com laterais cheias e o cabelo cai sobre os ombros e as costas
+  const style = long ? 1 : a.hairstyle === 'short' ? ((h >>> 12) % 2 ? 0 : 2) : (h >>> 12) % 3;
+  return { shirt, hair, skin, style, long };
 }
 
 // ---------- personagem sentado, visto de costas ----------
@@ -54,9 +56,14 @@ const BODY = {
   1: ['.S.CCCCCCCCCC...', '.cCCCCCCCCCCCC..', '.cCCCCCCCCCCCCc.', '..CCCCCCCCCCCCc.', '..CCCCCCCCCCCCc.', '..cKKKKKKKKKKcc.', '..KKKKKKKKKKKK..', '..KkkkkkkkkkkK..', '..KKKKKKKKKKKK..', '.....KK..KK.....'],
   2: ['...CCCCCCCCCC.S.', '..CCCCCCCCCCCCc.', '.cCCCCCCCCCCCCc.', '.cCCCCCCCCCCCC..', '.cCCCCCCCCCCCC..', '.ccKKKKKKKKKKc..', '..KKKKKKKKKKKK..', '..KkkkkkkkkkkK..', '..KKKKKKKKKKKK..', '.....KK..KK.....'],
 };
+// pinta cabelo (H) nas colunas indicadas das primeiras linhas do corpo (cabelo longo)
+const comCabelo = (rows, linhas, de, ate) => rows.map((r, y) => (y < linhas ? [...r].map((ch, x) => (x >= de && x <= ate && ch !== '.' ? 'H' : ch)).join('') : r));
+const LONGO_COSTAS = (rows) => comCabelo(rows, 4, 4, 11);
+const LONGO_FRENTE = (rows) => rows.map((r, y) => (y < 4 ? [...r].map((ch, x) => ((x === 2 || x === 3 || x === 12 || x === 13) ? 'H' : ch)).join('') : r));
+const LONGO_LADO = (rows) => rows.map((r, y) => (y < 4 ? [...r].map((ch, x) => (x >= 3 && x <= 5 ? 'H' : ch)).join('') : r));
 export function agentSprite(look, frame) {
-  return cached(`ag:${look.hair}:${look.skin}:${look.shirt[0]}:${look.style}:${frame}`, () =>
-    sprite([...HEADS[look.style], ...BODY[frame]], { H: look.hair, S: look.skin, C: look.shirt[0], c: look.shirt[1], K: '#3a3f4b', k: '#2a2e37' }));
+  return cached(`ag:${look.hair}:${look.skin}:${look.shirt[0]}:${look.style}:${look.long ? 'L' : ''}:${frame}`, () =>
+    sprite([...HEADS[look.style], ...(look.long ? LONGO_COSTAS(BODY[frame]) : BODY[frame])], { H: look.hair, S: look.skin, C: look.shirt[0], c: look.shirt[1], K: '#3a3f4b', k: '#2a2e37' }));
 }
 // ---------- personagem em pé (andando) ----------
 // de frente (descendo), de costas (subindo) e de lado (direita; a esquerda é espelhada)
@@ -87,10 +94,11 @@ const LEGS = {
   ],
 };
 export function walkerSprite(look, facing, frame) {
-  return cached(`wk:${look.hair}:${look.skin}:${look.shirt[0]}:${look.style}:${facing}:${frame}`, () => {
+  return cached(`wk:${look.hair}:${look.skin}:${look.shirt[0]}:${look.style}:${look.long ? 'L' : ''}:${facing}:${frame}`, () => {
     const lado = facing === 'left' || facing === 'right';
     const head = facing === 'up' ? HEADS[look.style] : lado ? SIDE_HEADS[look.style] : FRONT_HEADS[look.style];
-    const torso = lado ? TORSO.side : TORSO.front;
+    let torso = lado ? TORSO.side : TORSO.front;
+    if (look.long) torso = facing === 'up' ? LONGO_COSTAS(torso) : lado ? LONGO_LADO(torso) : LONGO_FRENTE(torso);
     const legs = (lado ? LEGS.side : LEGS.front)[frame % 3];
     const pal = { H: look.hair, S: look.skin, C: look.shirt[0], c: look.shirt[1], P: '#3a3f4b', B: '#1f2228', e: '#1f2228', m: '#b5655a' };
     const c = sprite([...head, ...torso, ...legs], pal);

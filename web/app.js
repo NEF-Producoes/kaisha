@@ -47,6 +47,7 @@ const state = {
   score: null,         // placar do dia
   visits: [],          // visitas do dia (pacientes, clientes) vindas do servidor
   visitas: new Map(),  // id -> boneco da visita andando pelo escritório
+  buscas: new Map(),   // agente -> paciente que ele foi buscar na sala de espera
   chamadas: new Map(), // teleconsultas em andamento (janela de vídeo na mesa de quem atende)
   visitasProntas: false, // depois do primeiro quadro, quem chega entra pela porta (antes disso já aparece no lugar)
   selected: null,
@@ -287,6 +288,8 @@ const statusOf = (id) => {
   return a.status;
 };
 const ATIVO = new Set(['working', 'waiting', 'error']);
+// quem não sai da mesa: o agente central (distribui as tarefas) e quem tem "fica na mesa"
+const naMesa = (a) => !!(a.central || a.fixed);
 
 // ---------- os agentes andando pelo escritório ----------
 // modos: seated (na mesa), pause (parado em pé), walk (passeando), ring (celular tocando), run (correndo para a mesa)
@@ -313,7 +316,7 @@ function syncEntities() {
     if (e) { e.desk = d; e.seat = seat; e.agent = d.agent; e.look = agentLook(d.agent); }
     else {
       e = { id, desk: d, agent: d.agent, seat, look: agentLook(d.agent), path: [], facing: 'down', step: 0, timer: 0, last: st };
-      if (d.agent.central || ATIVO.has(st) || seat.entrada < 0) sentar(e);
+      if (naMesa(d.agent) || ATIVO.has(st) || seat.entrada < 0) sentar(e);
       else {
         // começa em pé num lugar qualquer da mesma região da mesa
         const lista = areaDoAgente({ agent: d.agent, seat }, seat.entrada);
@@ -355,11 +358,13 @@ function passear(e) {
   if (!p || !p.length) { e.mode = 'pause'; e.timer = rnd(1000, 3000); return; }
   e.path = p; e.mode = 'walk'; e.poi = pois.includes(alvo);
 }
-function irParaMesa(e) {
+function irParaMesa(e, calmo = false) {
+  // dia de atendimento: antes de ir para a mesa, busca o paciente na sala de espera
+  if (!calmo && buscarPaciente(e)) return;
   const aqui = blocoDe(e.x, e.y);
   const p = e.seat.entrada >= 0 ? caminho(aqui, e.seat.entrada) : null;
   if (!p) { sentar(e); return; }
-  e.path = p; e.mode = 'run';
+  e.path = p; e.mode = calmo ? 'voltar' : 'run';
 }
 function chamar(e) {
   // a tarefa sai da mesa do agente central (o Musashi) e chega no celular de quem vai fazer
@@ -376,8 +381,8 @@ function comemorar(e, tarefa) {
   setTimeout(refreshOverlay, 4600);
   refreshOverlay();
   if (e.mode === 'celebrate') return; // já está comemorando: uma festa só
-  // o agente central comemora sem sair da mesa
-  if (e.agent.central) { if (!state.festaCentral || Date.now() - state.festaCentral > 1500) { state.festaCentral = Date.now(); confete(e.desk.x * T + 16, e.desk.y * T + 2, e.look.shirt[0]); } return; }
+  // quem fica na mesa comemora sem sair dela
+  if (naMesa(e.agent)) { if (!state.festaCentral || Date.now() - state.festaCentral > 1500) { state.festaCentral = Date.now(); confete(e.desk.x * T + 16, e.desk.y * T + 2, e.look.shirt[0]); } return; }
   if (e.mode === 'seated') levantar(e);
   if (e.seat.entrada < 0 && e.mode === 'seated') return;
   e.mode = 'celebrate'; e.timer = 2600; e.path = []; e.facing = 'down';
@@ -416,14 +421,14 @@ function chamarInspetor(alvo) {
 function mudouStatus(e, st) {
   if (st === 'error' && e.last !== 'error' && !e.agent.inspector) chamarInspetor(e);
   if (ATIVO.has(st) && !ATIVO.has(e.last)) {
-    if (e.mode !== 'seated' && e.mode !== 'run' && e.mode !== 'ring') chamar(e);
+    if (!['seated', 'run', 'ring', 'buscar', 'chamando', 'voltar'].includes(e.mode)) chamar(e);
     else if (e.mode === 'seated' && !e.agent.central) {
       const central = [...state.ents.values()].find((x) => x.agent.central && x !== e);
       if (central) state.mail.push({ de: { x: central.x, y: central.y - 24 }, para: e, t: 0, dur: 700 });
     }
   }
   if (!ATIVO.has(st) && e.mode === 'seated') e.timer = rnd(1500, 4000);
-  if (!ATIVO.has(st) && (e.mode === 'run' || e.mode === 'ring')) { e.mode = 'pause'; e.path = []; e.timer = rnd(500, 1500); }
+  if (!ATIVO.has(st) && (e.mode === 'run' || e.mode === 'ring' || e.mode === 'voltar')) { e.mode = 'pause'; e.path = []; e.timer = rnd(500, 1500); }
   if (ATIVO.has(st) && (e.mode === 'celebrate' || e.mode === 'visit' || e.mode === 'inspect')) chamar(e);
   e.last = st;
 }
@@ -448,14 +453,16 @@ function atualizar(dt) {
     const ativo = ATIVO.has(st);
     switch (e.mode) {
       case 'seated':
-        if (!ativo && !e.agent.central) { e.timer -= dt; if (e.timer <= 0) levantar(e); }
+        if (!ativo && !naMesa(e.agent)) { e.timer -= dt; if (e.timer <= 0) levantar(e); }
         break;
       case 'pause':
         if (ativo) { chamar(e); break; }
+        if (naMesa(e.agent)) { irParaMesa(e, true); break; }
         e.timer -= dt; if (e.timer <= 0) passear(e);
         break;
       case 'walk':
         if (ativo) { chamar(e); break; }
+        if (naMesa(e.agent)) { irParaMesa(e, true); break; }
         if (andar(e, dt, VEL.walk)) { e.mode = 'pause'; e.timer = e.poi ? rnd(3000, 8000) : rnd(1200, 5000); e.facing = e.poi ? 'up' : e.facing; }
         break;
       case 'ring':
@@ -473,13 +480,27 @@ function atualizar(dt) {
         if (ativo) { chamar(e); break; }
         e.timer -= dt; if (e.timer <= 0) { e.mode = 'pause'; e.timer = rnd(500, 1500); e.visita = null; }
         break;
+      case 'buscar':
+        // indo até a sala de espera chamar o paciente
+        if (andar(e, dt, VEL.walk * 1.5)) {
+          const b = state.buscas.get(e.id);
+          if (b) b.chegou = Date.now();
+          e.mode = 'chamando'; e.timer = 900; e.facing = b && b.olhar ? b.olhar : 'down';
+        }
+        break;
+      case 'chamando':
+        e.timer -= dt; if (e.timer <= 0) irParaMesa(e, true);
+        break;
       case 'run':
-        if (andar(e, dt, VEL.run)) {
+      case 'voltar': {
+        const vel = e.mode === 'voltar' ? VEL.walk * 1.15 : VEL.run;
+        if (andar(e, dt, vel)) {
           // último trecho: da frente da mesa até a cadeira
-          const dx = e.seat.x - e.x, dy = e.seat.y - e.y, dist = Math.hypot(dx, dy), passo = (VEL.run * dt) / 1000;
+          const dx = e.seat.x - e.x, dy = e.seat.y - e.y, dist = Math.hypot(dx, dy), passo = (vel * dt) / 1000;
           if (dist <= passo) sentar(e); else { e.x += (dx / dist) * passo; e.y += (dy / dist) * passo; e.facing = 'up'; }
         }
         break;
+      }
     }
   }
 }
@@ -535,6 +556,28 @@ function proximaVisita(agora) {
   for (const v of state.visits) if (!v.online && v.inicio > agora && (!prox || v.inicio < prox.inicio)) prox = v;
   return prox;
 }
+// no horário da consulta presencial, quem atende vai até a sala de espera chamar o paciente e os dois vão juntos para a sala
+function buscarPaciente(e) {
+  const b = state.buscas.get(e.id);
+  if (!b || b.chegou || Date.now() - b.t0 > 45000) return false;
+  const pe = state.visitas.get(b.visitId);
+  if (!pe) { b.chegou = Date.now(); return false; }
+  const { W, H, walk } = state.nav;
+  const base = (pe.mode === 'sentado' || pe.mode === 'senta') && pe.alvo && pe.alvo.sentar ? pe.alvo.tile : blocoDe(pe.x, pe.y);
+  const aqui = e.mode === 'seated' && e.seat.entrada >= 0 ? e.seat.entrada : blocoDe(e.x, e.y);
+  const cands = [[base + 1, 'left'], [base - 1, 'right'], [base + W, 'up'], [base - W, 'down'], [base, 'up']]
+    .filter(([i]) => i >= 0 && i < W * H && walk[i] && Math.abs((i % W) - (base % W)) <= 1);
+  for (const [i, olhar] of cands) {
+    const p = caminho(aqui, i);
+    if (!p) continue;
+    if (e.mode === 'seated') Object.assign(e, centroBloco(aqui));
+    b.olhar = olhar;
+    e.path = p.length ? p : [i]; e.mode = 'buscar';
+    return true;
+  }
+  b.chegou = Date.now();
+  return false;
+}
 function faseDaVisita(v, agora, prox = proximaVisita(agora)) {
   if (v.online) return null;
   if (agora < v.inicio - CHEGADA) return prox && prox.id === v.id ? 'espera' : null;
@@ -558,19 +601,36 @@ function atualizarVisitas(dt) {
   }
   const vivas = new Set();
   // lugares já ocupados continuam com quem está neles (ninguém troca de cadeira quando outro sai)
-  const ocupados = new Set(), naMesa = new Map();
+  const ocupados = new Set(), naConsulta = new Map();
   for (const v of lista) {
     const e = state.visitas.get(v.id), fase = faseDaVisita(v, agora, prox);
     if (!e || !e.lugar) continue;
-    if (fase === 'espera' && e.lugar.tipo !== 's') ocupados.add(e.lugar.chave);
-    if (fase === 'consulta' && e.lugar.tipo === 's') naMesa.set(e.lugar.chave, v.id);
+    if ((fase === 'espera' || fase === 'consulta') && e.lugar.tipo !== 's') ocupados.add(e.lugar.chave);
+    if (fase === 'consulta' && e.lugar.tipo === 's') naConsulta.set(e.lugar.chave, v.id);
   }
   let emPe = 0;
+  // buscas que já não fazem sentido (consulta acabou ou mudou)
+  for (const [ag, b] of state.buscas) {
+    const v = lista.find((x) => x.id === b.visitId);
+    if (!v || faseDaVisita(v, agora, prox) !== 'consulta' || Date.now() - b.t0 > 120000) state.buscas.delete(ag);
+  }
   for (const v of lista) {
     const fase = faseDaVisita(v, agora, prox);
     let e = state.visitas.get(v.id);
     if (!fase || (fase === 'saindo' && !e)) continue;
     vivas.add(v.id);
+    // começou a consulta de quem estava esperando: quem atende vem buscar
+    if (fase === 'consulta' && e && e.fase === 'espera' && state.visitasProntas && v.agente && !state.buscas.has(v.agente)) {
+      const doc = state.ents && state.ents.get(v.agente);
+      if (doc) {
+        state.buscas.set(v.agente, { visitId: v.id, chegou: 0, t0: Date.now() });
+        if (['seated', 'pause', 'walk', 'celebrate', 'visit', 'inspect', 'voltar', 'run'].includes(doc.mode)) {
+          if (!buscarPaciente(doc)) irParaMesa(doc, true);
+        }
+      }
+    }
+    const busca = v.agente && state.buscas.get(v.agente);
+    const esperandoBusca = fase === 'consulta' && busca && busca.visitId === v.id && (!busca.chegou || Date.now() - busca.chegou < 900) && Date.now() - busca.t0 < 45000;
     // aonde ir
     let alvo;
     if (fase === 'espera') {
@@ -585,13 +645,15 @@ function atualizarVisitas(dt) {
         }
         ocupados.add(alvo.chave);
       }
+    } else if (fase === 'consulta' && esperandoBusca && e && e.lugar) {
+      alvo = e.lugar; // continua sentado até a doutora chegar
     } else if (fase === 'consulta') {
-      if (e && e.lugar && e.lugar.tipo === 's' && naMesa.get(e.lugar.chave) === v.id) alvo = e.lugar;
+      if (e && e.lugar && e.lugar.tipo === 's' && naConsulta.get(e.lugar.chave) === v.id) alvo = e.lugar;
       else {
         const sps = L2.spot.get(v.agente) || [];
-        const sp = sps.find((x) => !naMesa.has('s' + x.tile)) || sps[0];
+        const sp = sps.find((x) => !naConsulta.has('s' + x.tile)) || sps[0];
         alvo = sp ? { tipo: 's', chave: 's' + sp.tile, tile: sp.tile, facing: sp.facing } : { tipo: 'p', chave: 'p' + L2.entrada, tile: L2.entrada, facing: 'up' };
-        naMesa.set(alvo.chave, v.id);
+        naConsulta.set(alvo.chave, v.id);
       }
     } else alvo = { tipo: 'x', chave: 'saida', tile: L2.entrada, sair: true };
     if (!e) {
@@ -706,7 +768,7 @@ function desenhaAgente(e, heads) {
     topo = y + bob;
     if (st === 'waiting') maoLevantada(x, y + bob, e.look);
   } else {
-    const andando = e.mode === 'walk' || e.mode === 'run' || e.mode === 'visit';
+    const andando = e.mode === 'walk' || e.mode === 'run' || e.mode === 'visit' || e.mode === 'buscar' || e.mode === 'voltar';
     const fr = andando ? 1 + (Math.floor(e.step / (e.mode === 'run' ? 5 : 4)) % 2) : 0;
     // comemorando: pulinhos
     const quica = e.mode === 'celebrate' ? -Math.round(Math.abs(Math.sin(e.step * 7)) * 7) : andando && fr === 1 ? -1 : 0;

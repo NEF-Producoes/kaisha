@@ -12,8 +12,8 @@ salas:
   - { id: espera,      nome: Sala de espera, tipo: espera, area: [0, 8, 12, 7], piso: ladrilho }
   - { id: financeiro,  nome: Financeiro,     area: [12, 8, 12, 7], piso: xadrez, parede: escura }
 agentes:
-  - { id: dra_erika,  nome: Dra. Erika, cargo: Neurologista, sala: consultorio, mesa: [17, 4], cor: branco, fica_na_sala: true }
-  - { id: secretaria, nome: Secretária, cargo: Agenda,       sala: recepcao,    mesa: [5, 4],  cor: rosa, fica_na_sala: true }
+  - { id: dra_erika,  nome: Dra. Erika, cargo: Neurologista, sala: consultorio, mesa: [17, 4], cor: branco, penteado: longo }
+  - { id: secretaria, nome: Secretária, cargo: Agenda,       sala: recepcao,    mesa: [5, 4],  cor: rosa, fica_na_mesa: true }
 moveis:
   - { tipo: janela,  pos: [1, 0] }
   - { tipo: quadro,  pos: [8, 0] }
