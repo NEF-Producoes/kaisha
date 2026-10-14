@@ -1,5 +1,5 @@
 // Kaisha · escritório no navegador
-import { T, sprite, cached, agentLook, agentSprite, walkerSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr } from './sprites.js';
+import { T, sprite, cached, agentLook, agentSprite, walkerSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr } from './sprites.js?v=__V__';
 
 const I18N = {
   'pt-BR': {
@@ -647,7 +647,12 @@ async function loadState() {
 function connect() {
   const es = new EventSource('/api/stream');
   const dot = $('#live');
-  es.addEventListener('hello', () => { dot.dataset.on = '1'; dot.title = L.connected; });
+  es.addEventListener('hello', (e) => {
+    dot.dataset.on = '1'; dot.title = L.connected;
+    // o servidor foi atualizado: recarrega para pegar o painel novo
+    const v = JSON.parse(e.data).version;
+    if (v && '__V__' !== '_' + '_V_' + '_' && v !== '__V__') location.reload();
+  });
   es.addEventListener('agents', (e) => upsertAgents(JSON.parse(e.data)));
   es.addEventListener('office', (e) => applySnapshot(JSON.parse(e.data)));
   es.addEventListener('removed', (e) => { state.agents.delete(JSON.parse(e.data).id); rebuild(); });

@@ -96,7 +96,14 @@ function serveStatic(req, res, pathname) {
   if (!file.startsWith(WEB)) return json(res, 404, { erro: 'não encontrado' });
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) return json(res, 404, { erro: 'não encontrado' });
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
+    const ext = path.extname(file);
+    // HTML e JS levam a versão nos endereços (app.js?v=0.3.0): atualizou o Kaisha, o navegador baixa de novo
+    if (ext === '.html' || ext === '.js') {
+      const body = fs.readFileSync(file, 'utf8').replaceAll('__V__', VERSION);
+      res.writeHead(200, { 'content-type': MIME[ext], 'cache-control': ext === '.html' ? 'no-store' : 'public, max-age=31536000, immutable' });
+      return res.end(body);
+    }
+    res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream', 'cache-control': 'no-cache' });
     fs.createReadStream(file).pipe(res);
   });
 }
@@ -152,7 +159,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       res.write('retry: 3000\n\n');
-      send(res, 'hello', { serverTime: Date.now() });
+      send(res, 'hello', { serverTime: Date.now(), version: VERSION });
       clients.add(res);
       req.on('close', () => clients.delete(res));
       return;
