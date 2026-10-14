@@ -358,6 +358,8 @@ function comemorar(e, tarefa) {
   setTimeout(refreshOverlay, 4600);
   refreshOverlay();
   if (e.mode === 'celebrate') return; // já está comemorando: uma festa só
+  // o agente central comemora sem sair da mesa
+  if (e.agent.central) { if (!state.festaCentral || Date.now() - state.festaCentral > 1500) { state.festaCentral = Date.now(); confete(e.desk.x * T + 16, e.desk.y * T + 2, e.look.shirt[0]); } return; }
   if (e.mode === 'seated') levantar(e);
   if (e.seat.entrada < 0 && e.mode === 'seated') return;
   e.mode = 'celebrate'; e.timer = 2600; e.path = []; e.facing = 'down';
