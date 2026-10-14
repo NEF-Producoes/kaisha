@@ -58,6 +58,53 @@ export function agentSprite(look, frame) {
   return cached(`ag:${look.hair}:${look.skin}:${look.shirt[0]}:${look.style}:${frame}`, () =>
     sprite([...HEADS[look.style], ...BODY[frame]], { H: look.hair, S: look.skin, C: look.shirt[0], c: look.shirt[1], K: '#3a3f4b', k: '#2a2e37' }));
 }
+// ---------- personagem em pé (andando) ----------
+// de frente (descendo), de costas (subindo) e de lado (direita; a esquerda é espelhada)
+const FRONT_HEADS = [
+  ['.....HHHHHH.....', '....HHHHHHHH....', '...HHHHHHHHHH...', '...HSSSSSSSSH...', '...SSeSSSSeSS...', '...SSSSSSSSSS...', '....SSSmmSSS....', '.....SSSSSS.....'],
+  ['....HHHHHHHH....', '...HHHHHHHHHH...', '..HHHHHHHHHHHH..', '..HHSSSSSSSSHH..', '..HHSeSSSSeSHH..', '..HHSSSSSSSSHH..', '..HH.SSmmSS.HH..', '..HH.SSSSSS.HH..'],
+  ['......HHHH......', '....HHHHHHHH....', '...HHSSSSSSHH...', '...SSSSSSSSSS...', '...SSeSSSSeSS...', '...SSSSSSSSSS...', '....SSSmmSSS....', '.....SSSSSS.....'],
+];
+const SIDE_HEADS = [
+  ['.....HHHHHH.....', '....HHHHHHHH....', '...HHHHHHHHHH...', '...HHHHHSSSSS...', '...HHHHSSSeSS...', '...HHHSSSSSSS...', '....HSSSSSmS....', '.....SSSSSS.....'],
+  ['....HHHHHHHH....', '...HHHHHHHHHH...', '..HHHHHHHHHHHH..', '..HHHHHHSSSSS...', '..HHHHHSSSeSS...', '..HHHHHSSSSSS...', '..HHHH.SSSSmS...', '..HHH..SSSSS....'],
+  ['......HHHH......', '....HHHHHHHH....', '...HHHHHHSSSS...', '...HHHHSSSSSS...', '...HHHSSSSeSS...', '...SSSSSSSSSS...', '....SSSSSSmS....', '.....SSSSSS.....'],
+];
+const TORSO = {
+  front: ['....CCCCCCCC....', '...CCCCCCCCCC...', '..cCCCCCCCCCCc..', '..cCCCCCCCCCCc..', '..SCCCCCCCCCCS..', '...CCCCCCCCCC...', '...PPPPPPPPPP...'],
+  side: ['.....CCCCCCC....', '....CCCCCCCCC...', '....CCCCCCCCC...', '....CcCCCCCCC...', '....CSCCCCCCC...', '....CCCCCCCCC...', '....PPPPPPPPP...'],
+};
+const LEGS = {
+  front: [
+    ['...PPPP..PPPP...', '...PPPP..PPPP...', '...PPPP..PPPP...', '...PPP....PPP...', '...BBB....BBB...'],
+    ['...PPPP..PPPP...', '...PPPP..PPPP...', '...BBBB..PPPP...', '..........PPP...', '..........BBB...'],
+    ['...PPPP..PPPP...', '...PPPP..PPPP...', '...PPPP..BBBB...', '...PPP..........', '...BBB..........'],
+  ],
+  side: [
+    ['.....PPPPPP.....', '.....PPPPPP.....', '.....PPP.PPP....', '.....PPP.PPP....', '.....BBB.BBBB...'],
+    ['.....PPPPPP.....', '....PPP..PPP....', '...PPP....PPP...', '..PPP......PPP..', '..BBB......BBBB.'],
+    ['.....PPPPPP.....', '.....PPPPPP.....', '......PPPPP.....', '......PPPP......', '......BBBBB.....'],
+  ],
+};
+export function walkerSprite(look, facing, frame) {
+  return cached(`wk:${look.hair}:${look.skin}:${look.shirt[0]}:${look.style}:${facing}:${frame}`, () => {
+    const lado = facing === 'left' || facing === 'right';
+    const head = facing === 'up' ? HEADS[look.style] : lado ? SIDE_HEADS[look.style] : FRONT_HEADS[look.style];
+    const torso = lado ? TORSO.side : TORSO.front;
+    const legs = (lado ? LEGS.side : LEGS.front)[frame % 3];
+    const pal = { H: look.hair, S: look.skin, C: look.shirt[0], c: look.shirt[1], P: '#3a3f4b', B: '#1f2228', e: '#1f2228', m: '#b5655a' };
+    const c = sprite([...head, ...torso, ...legs], pal);
+    if (facing !== 'left') return c;
+    const f = document.createElement('canvas'); f.width = c.width; f.height = c.height;
+    const fg = f.getContext('2d'); fg.translate(c.width, 0); fg.scale(-1, 1); fg.drawImage(c, 0, 0);
+    return f;
+  });
+}
+
+// celular tocando (notificação de tarefa) e envelope (tarefa saindo da recepção)
+export const phoneSprite = () => cached('phone', () => sprite(['KKKKKK', 'KwwwwK', 'KwggwK', 'KwggwK', 'KwwwwK', 'KwwwwK', 'KKyyKK', 'KKKKKK'], { K: '#22252b', w: '#7fd1ff', g: '#4fa66a', y: '#5a6069' }));
+export const mailSprite = () => cached('mail', () => sprite(['WWWWWWW', 'WbWWWbW', 'WWbWbWW', 'WWWbWWW', 'WWWWWWW'], { W: '#f7f3ea', b: '#c0504d' }));
+
 export function emptyChair() {
   return cached('chair', () => sprite(['................', '................', '................', '................', '................', '................', '................', '................', '....KKKKKKKK....', '...KKKKKKKKKK...', '...KkkkkkkkkK...', '...KKKKKKKKKK...', '...KKKKKKKKKK...', '..KKKKKKKKKKKK..', '..KKKKKKKKKKKK..', '..KkkkkkkkkkkK..', '..KKKKKKKKKKKK..', '.....KK..KK.....'], { K: '#3a3f4b', k: '#2a2e37' }));
 }
@@ -78,6 +125,9 @@ WALLS.light = WALLS.clara; WALLS.blue = WALLS.azul; WALLS.green = WALLS.verde; W
 
 // ---------- móveis ----------
 // cada móvel: largura e altura em pixels e uma função que desenha
+// móveis de parede e tapetes não bloqueiam a passagem dos agentes
+export const WALL_FURNITURE = new Set(['relogio', 'janela', 'quadro', 'grafico']);
+export const FLAT_FURNITURE = new Set(['tapete']);
 const R = (g, c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
 export const FURNITURE = {
   mesa: { w: 32, h: 16, draw: (g, x, y) => { R(g, '#8a5a36', x, y + 2, 32, 5); R(g, '#a5703f', x, y + 2, 32, 1); R(g, '#6e472b', x + 1, y + 7, 30, 7); R(g, '#5b3b24', x + 1, y + 13, 30, 1); R(g, '#4a301d', x + 2, y + 14, 2, 2); R(g, '#4a301d', x + 28, y + 14, 2, 2); R(g, '#7d522f', x + 4, y + 9, 10, 3); R(g, '#c9a46a', x + 8, y + 10, 2, 1); } },
@@ -115,3 +165,4 @@ export function drawMonitor(g, x, y, status, tick) {
     R(g, '#2b3a55', x + 2 + (tick % 10), y + 3 + (tick % 5), 2, 2);
   }
 }
+export const furnitureKey = (type) => (FURNITURE[type] ? type : FURN_ALIAS[type] || null);

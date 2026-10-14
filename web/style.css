@@ -63,3 +63,9 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .h-task { overflow-wrap: anywhere; }
 .foot { text-align: center; padding: 8px 16px 16px; }
 @media (max-width: 640px) { .stage { padding: 8px; } .right #theme { display: none; } }
+/* agente andando: placa enxuta, só nome e status */
+.plate.walking { min-width: 0; padding: 0 calc(2px * var(--s)); background: rgb(22 25 31 / .78); }
+.plate.walking .plate-role { display: none; }
+.plate.walking[data-status="idle"] .plate-status, .plate.walking[data-status="offline"] .plate-status { display: none; }
+/* nome de sala que não tem parede (planta aberta): pintado no chão */
+.room-name.on-floor { background: rgb(42 46 55 / .55); box-shadow: none; }

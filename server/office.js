@@ -16,7 +16,7 @@ const ALIAS = {
   datas_especiais: 'special_days', data: 'date', calendario: 'calendar', calendário: 'calendar', periodo: 'period', período: 'period',
   de: 'from', ate: 'to', até: 'to', enfeites: 'decorations', ponto: 'at', efeito: 'effect', desenhos: 'sprites',
   paleta: 'palette', pixels: 'pixels', cabelo: 'hair', pele: 'skin', roupa: 'shirt', idioma: 'lang', titulo: 'title', título: 'title',
-  movel: 'movable', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
+  movel: 'movable', planta: 'plan', central: 'central', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
 };
 const norm = (v) => {
   if (Array.isArray(v)) return v.map(norm);
@@ -65,10 +65,13 @@ export function validateOffice(raw) {
       theme: String(o.theme ?? 'auto'),
       calendar: String(o.calendar || 'br'),
       lang: o.lang ? String(o.lang) : null,
+      // planta aberta: um salão só, salas separadas por divisórias com passagens
+      plan: ['aberta', 'aberto', 'open', 'integrada'].includes(String(o.plan || '').toLowerCase()) ? 'open' : 'rooms',
       rooms: rooms.map((r) => ({ id: String(r.id), name: String(r.name ?? r.id), area: r.area, floor: r.floor || 'madeira', wall: r.wall || 'clara' })),
       agents: agents.map((a) => ({
         id: String(a.id), name: String(a.name ?? a.id), role: a.role ? String(a.role) : '', room: a.room ? String(a.room) : null,
         desk: pair(a.desk) ? a.desk : null, color: a.color || null, hair: a.hair || null, skin: a.skin || null, shirt: a.shirt || null,
+        central: a.central === true || a.central === 'sim', // fica sempre na mesa e distribui as tarefas
       })),
       furniture: furniture.map((f) => ({ type: String(f.type), pos: f.pos, room: f.room ? String(f.room) : null, flip: !!f.flip })),
       special_days: special.map((d) => ({ date: String(d.date), name: String(d.name || ''), theme: d.theme ? String(d.theme) : null, message: d.message ? String(d.message) : null })),

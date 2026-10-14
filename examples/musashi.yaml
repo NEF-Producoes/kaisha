@@ -1,30 +1,55 @@
 # Escritório do Musashi (assistente pessoal no WhatsApp, feito em n8n)
+# Planta aberta: um salão só, com divisórias baixas e passagens entre as áreas.
+# O Musashi fica no centro distribuindo as tarefas; quem está livre circula pelo escritório.
 nome: Musashi HQ
 tema: auto
+planta: aberta
 salas:
-  - { id: comando,    nome: Comando,          area: [0, 0, 12, 9],  piso: madeira }
-  - { id: operacao,   nome: Operação,         area: [12, 0, 16, 9], piso: carpete_azul }
-  - { id: crm,        nome: CRM e Financeiro, area: [0, 9, 16, 8],  piso: carpete_verde }
-  - { id: supervisao, nome: Supervisão,       area: [16, 9, 12, 8], piso: xadrez, parede: escura }
+  - { id: operacao,    nome: Operação,         area: [0, 0, 10, 10],   piso: carpete_azul }
+  - { id: transcricao, nome: Transcrição,      area: [10, 0, 10, 6],   piso: madeira }
+  - { id: supervisao,  nome: Supervisão,       area: [20, 0, 10, 10],  piso: xadrez, parede: escura }
+  - { id: comando,     nome: Comando,          area: [10, 6, 10, 8],   piso: madeira_escura }
+  - { id: crm,         nome: CRM e Financeiro, area: [0, 10, 10, 10],  piso: carpete_verde }
+  - { id: copa,        nome: Copa,             area: [10, 14, 10, 6],  piso: ladrilho }
+  - { id: reuniao,     nome: Reunião,          area: [20, 10, 10, 10], piso: madeira }
 agentes:
-  - { id: musashi,    nome: Musashi,    cargo: Recepção,       sala: comando,    mesa: [2, 3],   cor: vermelho }
-  - { id: escrivao,   nome: Escrivão,   cargo: Transcrição,    sala: comando,    mesa: [7, 3],   cor: amarelo }
-  - { id: agenda,     nome: Agenda,     cargo: Lembretes,      sala: operacao,   mesa: [13, 3],  cor: azul }
-  - { id: mensageiro, nome: Mensageiro, cargo: Mensagens,      sala: operacao,   mesa: [18, 3],  cor: verde }
-  - { id: vigia,      nome: Vigia,      cargo: Grupos,         sala: operacao,   mesa: [23, 3],  cor: roxo }
-  - { id: cadastro,   nome: Cadastro,   cargo: CRM e Asaas,    sala: crm,        mesa: [1, 12],  cor: laranja }
-  - { id: prontuario, nome: Prontuário, cargo: Clientes,       sala: crm,        mesa: [6, 12],  cor: rosa }
-  - { id: caixa,      nome: Caixa,      cargo: Faturamento,    sala: crm,        mesa: [11, 12], cor: verde }
-  - { id: sentinela,  nome: Sentinela,  cargo: Erros,          sala: supervisao, mesa: [20, 12], cor: cinza }
+  - { id: musashi,    nome: Musashi,    cargo: Recepção,    sala: comando,     mesa: [14, 9],  cor: vermelho, central: true }
+  - { id: escrivao,   nome: Escrivão,   cargo: Transcrição, sala: transcricao, mesa: [14, 3],  cor: amarelo }
+  - { id: agenda,     nome: Agenda,     cargo: Lembretes,   sala: operacao,    mesa: [1, 4],   cor: azul }
+  - { id: mensageiro, nome: Mensageiro, cargo: Mensagens,   sala: operacao,    mesa: [4, 4],   cor: verde }
+  - { id: vigia,      nome: Vigia,      cargo: Grupos,      sala: operacao,    mesa: [7, 4],   cor: roxo }
+  - { id: cadastro,   nome: Cadastro,   cargo: CRM e Asaas, sala: crm,         mesa: [1, 13],  cor: laranja }
+  - { id: prontuario, nome: Prontuário, cargo: Clientes,    sala: crm,         mesa: [4, 13],  cor: rosa }
+  - { id: caixa,      nome: Caixa,      cargo: Faturamento, sala: crm,         mesa: [7, 13],  cor: verde }
+  - { id: sentinela,  nome: Sentinela,  cargo: Erros,       sala: supervisao,  mesa: [24, 4],  cor: cinza }
 moveis:
-  - { tipo: estante,   pos: [10, 2] }
-  - { tipo: relogio,   pos: [2, 0] }
-  - { tipo: janela,    pos: [15, 0] }
-  - { tipo: quadro,    pos: [24, 0] }
-  - { tipo: planta,    pos: [26, 7] }
-  - { tipo: cafe,      pos: [12, 6] }
-  - { tipo: arquivo,   pos: [14, 11] }
-  - { tipo: grafico,   pos: [9, 9] }
-  - { tipo: sofa,      pos: [17, 14] }
-  - { tipo: planta,    pos: [26, 15] }
-  - { tipo: impressora, pos: [1, 15] }
+  # paredes (só as áreas encostadas na parede do fundo têm parede)
+  - { tipo: quadro,  pos: [2, 0] }
+  - { tipo: janela,  pos: [6, 0] }
+  - { tipo: relogio, pos: [16, 0] }
+  - { tipo: janela,  pos: [22, 0] }
+  - { tipo: grafico, pos: [26, 0] }
+  # Transcrição
+  - { tipo: estante, pos: [11, 2] }
+  - { tipo: estante, pos: [18, 2] }
+  # Operação
+  - { tipo: planta,  pos: [8, 8] }
+  # Supervisão
+  - { tipo: sofa,    pos: [21, 7] }
+  - { tipo: planta,  pos: [28, 7] }
+  # Comando (centro)
+  - { tipo: tapete,  pos: [13, 8] }
+  - { tipo: planta,  pos: [11, 11] }
+  - { tipo: planta,  pos: [18, 11] }
+  # CRM e Financeiro
+  - { tipo: arquivo,    pos: [8, 17] }
+  - { tipo: impressora, pos: [1, 18] }
+  # Copa
+  - { tipo: cafe,      pos: [11, 15] }
+  - { tipo: bebedouro, pos: [13, 15] }
+  - { tipo: sofa,      pos: [15, 18] }
+  - { tipo: planta,    pos: [18, 15] }
+  # Reunião
+  - { tipo: mesa_reuniao, pos: [23, 13] }
+  - { tipo: planta,       pos: [21, 11] }
+  - { tipo: planta,       pos: [28, 18] }

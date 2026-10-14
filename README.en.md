@@ -34,6 +34,10 @@ curl -X POST https://kaisha.example.com/api/events \
 
 Config keys work in English or Portuguese (`rooms`/`salas`, `agents`/`agentes`, `desk`/`mesa`, `furniture`/`moveis`…). See [`examples/office.yaml`](examples/office.yaml), [`examples/curl.md`](examples/curl.md) and the ready-made n8n sub-workflow in [`examples/n8n`](examples/n8n). The full option list (env vars, furniture, API routes) is in the [Portuguese README](README.md#variáveis-de-ambiente).
 
+**Open plan** (`plan: open`): one big floor instead of closed rooms. Only areas touching the back wall get a wall; the others are split by low partitions with a doorway in the middle of each shared edge. See `examples/musashi.yaml`.
+
+**Office life**: idle agents walk around the office (coffee machine, water cooler, couch). When a task arrives their phone rings, they run to their desk and sit down to work. An agent with `central: true` always stays at the desk and tasks fly from it to whoever picks them up, which suits an orchestrator.
+
 ## Themes
 
 Themes live in `themes/<id>/theme.yaml` (or `/data/themes/` for your own). Fixed or movable dates (Easter, Carnival, Black Friday), decorations placed on walls, ceilings, corners, desks and heads, sprites drawn as text, and effects (`snow`, `confetti`, `leaves`). See [CONTRIBUTING](CONTRIBUTING.md).

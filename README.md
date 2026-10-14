@@ -84,6 +84,10 @@ datas_especiais:
 
 As chaves podem ser em português ou inglês (`salas`/`rooms`, `agentes`/`agents`…). Um arquivo com erro não derruba nada: o escritório anterior continua e o erro aparece num aviso na tela. Exemplo completo e comentado em [`examples/office.yaml`](examples/office.yaml).
 
+**Planta aberta** (`planta: aberta`): em vez de salas fechadas, o escritório vira um salão só. Só as áreas encostadas no fundo têm parede; entre as outras entram divisórias baixas com uma passagem no meio de cada divisa. Veja [`examples/musashi.yaml`](examples/musashi.yaml).
+
+**Vida no escritório**: agente livre não fica parado na cadeira. Ele circula pelo escritório e passa no café, no bebedouro e no sofá. Quando chega uma tarefa, o celular dele toca, ele corre até a mesa e senta para trabalhar. Um agente com `central: true` fica sempre na mesa; as tarefas saem dele, num envelope, até quem vai fazer (bom para um orquestrador, como uma recepção).
+
 **Móveis**: `estante`, `planta`, `relogio`, `janela`, `quadro` (kanban), `grafico`, `bebedouro`, `arquivo`, `sofa`, `mesa_reuniao`, `impressora`, `tapete`, `cafe`.
 **Cores dos bonecos**: `vermelho`, `laranja`, `amarelo`, `verde`, `azul`, `roxo`, `rosa`, `cinza`, `preto`, `branco`.
 
