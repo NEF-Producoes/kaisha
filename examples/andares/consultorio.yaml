@@ -1,5 +1,5 @@
 # Andar do consultório da Dra. Erika Tavares: CRM e Financeiro da clínica (mesmo contrato da NEF).
-# As mesas já estão reservadas; os agentes aparecem como offline até os fluxos começarem a mandar status.
+# Ainda sem agentes: crie pelo ✎ Editar (aba Agentes) quando os fluxos do consultório existirem.
 # Os fluxos mandam "andar": "consultorio" (ou usam a chave KAISHA_API_KEY_CONSULTORIO, que só escreve aqui).
 # LGPD: o texto da tarefa aparece na tela. Não mande nome de paciente nem dado clínico, só o tipo de tarefa
 # ("cadastro de paciente novo", "pagamento recebido").
@@ -12,10 +12,7 @@ salas:
   - { id: financeiro, nome: Financeiro, area: [12, 0, 12, 8], piso: carpete_azul }
   - { id: espera,     nome: Sala de espera, area: [0, 8, 12, 6], piso: ladrilho }
   - { id: arquivo,    nome: Arquivo,    area: [12, 8, 12, 6], piso: xadrez, parede: escura }
-agentes:
-  - { id: cadastro,   nome: Cadastro,   cargo: Pacientes,   sala: recepcao,   mesa: [2, 4],  cor: laranja }
-  - { id: prontuario, nome: Prontuário, cargo: Fichas,      sala: recepcao,   mesa: [7, 4],  cor: rosa }
-  - { id: caixa,      nome: Caixa,      cargo: Asaas e Inter, sala: financeiro, mesa: [16, 4], cor: verde }
+agentes: []
 moveis:
   - { tipo: janela,  pos: [1, 0] }
   - { tipo: quadro,  pos: [9, 0] }

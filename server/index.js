@@ -61,12 +61,18 @@ const floors = createFloors({
   onList: (lista) => broadcast(null, 'floors', lista),
 });
 floors.seed(config.seedFloors, db);
-// agentes que estavam no andar principal mas agora estão declarados em outro andar mudam junto
-for (const id of db.ids(MAIN)) {
-  if (floors.get(MAIN).snapshot().office.agents.some((a) => a.id === id)) continue;
-  const destino = floors.floorOfAgent(id);
-  if (destino && destino !== MAIN && db.move(id, MAIN, destino)) log.info(`agente "${id}" levado para o andar "${destino}"`);
+// agente com estado num andar onde não está declarado, mas declarado em outro: o estado e o histórico vão para lá
+function arrumarAgentes() {
+  for (const f of floors.ids()) {
+    const declarados = new Set(floors.get(f).snapshot().office.agents.map((a) => a.id));
+    for (const id of db.ids(f)) {
+      if (declarados.has(id)) continue;
+      const destino = floors.floorOfAgent(id);
+      if (destino && destino !== f && db.move(id, f, destino)) log.info(`agente "${id}" levado do andar "${f}" para "${destino}"`);
+    }
+  }
 }
+arrumarAgentes();
 const floorDaChave = (env) => floors.ids().find((f) => f.toUpperCase().replace(/-/g, '_') === env.toUpperCase());
 
 // ---------- utilidades ----------

@@ -62,7 +62,9 @@ export function createFloors({ dataDir, tz, log, mainId, onChange, onList }) {
       else fs.writeFileSync(path.join(dir, `${id}.yaml`), toYaml(validateOffice({ name: id, plan: 'open', rooms: [{ id: 'salao', name: 'Salão', area: [0, 0, 16, 10] }] }).office));
       log.info?.(`andar "${id}" criado${fs.existsSync(exemplo) ? ' a partir do exemplo' : ''}`);
       scan();
-      const novos = floors.get(id).snapshot().office.agents.map((a) => a.id);
+      // agentes que já têm andar próprio (outro andar além do principal) não mudam
+      const outros = new Set(list().filter((f) => f.id !== id && f.id !== mainId).flatMap((f) => floors.get(f.id).snapshot().office.agents.map((a) => a.id)));
+      const novos = floors.get(id).snapshot().office.agents.map((a) => a.id).filter((a) => !outros.has(a));
       const principal = floors.get(mainId);
       const o = structuredClone(principal.snapshot().office);
       const ficam = o.agents.filter((a) => !novos.includes(a.id));
