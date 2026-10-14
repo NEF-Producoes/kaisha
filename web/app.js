@@ -354,7 +354,7 @@ function chamar(e) {
 // ---------- reações ao resultado das tarefas ----------
 // sucesso: pula, solta confete e vai tomar um café
 function comemorar(e, tarefa) {
-  state.flash.set(e.id, { texto: '✓ ' + (tarefa || 'feito'), ate: Date.now() + 4500 });
+  state.flash.set(e.id, { texto: '✓ ' + (String(tarefa || '').replace(/^[^\p{L}\p{N}]+/u, '') || 'feito'), ate: Date.now() + 4500 });
   setTimeout(refreshOverlay, 4600);
   refreshOverlay();
   if (e.mode === 'celebrate') return; // já está comemorando: uma festa só
