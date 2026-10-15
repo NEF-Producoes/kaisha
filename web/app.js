@@ -1043,7 +1043,9 @@ function lugaresDeVisita() {
   return out;
 }
 // o próximo paciente presencial já fica esperando na sala de espera, mesmo que falte mais de 15 min
+// (só com o escritório aberto: fora do expediente ele chega 15 min antes, como os outros)
 function proximaVisita(agora) {
+  if (state.periodo === 'noite') return null;
   let prox = null;
   for (const v of state.visits) if (!v.online && v.inicio > agora && (!prox || v.inicio < prox.inicio)) prox = v;
   return prox;
