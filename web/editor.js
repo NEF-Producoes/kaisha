@@ -208,7 +208,8 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
   // ---------- mapa: selecionar, arrastar e colocar ----------
   const bloco = (ev) => {
     const r = canvas.getBoundingClientRect();
-    return [Math.floor((ev.clientX - r.left) / (state.scale * T)), Math.floor((ev.clientY - r.top) / (state.scale * T))];
+    const off = state.off || { x: 0, y: 0 };
+    return [Math.floor((ev.clientX - r.left - off.x) / (state.scale * T)), Math.floor((ev.clientY - r.top - off.y) / (state.scale * T))];
   };
   const pegarMesa = (x, y) => draft().agents.findIndex((a) => a.desk && x >= a.desk[0] && x <= a.desk[0] + 1 && y >= a.desk[1] - 1 && y <= a.desk[1] + 1);
   const pegarMovel = (x, y) => {

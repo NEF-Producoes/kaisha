@@ -2,6 +2,7 @@
 import { initEditor } from './editor.js?v=__V__';
 import { T, sprite, cached, agentLook, agentSprite, walkerSprite, sittingSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr, drawWall, sombraChao } from './sprites.js?v=__V__';
 import { desenharRetrato } from './retrato.js?v=__V__';
+import { calcularVista, desenharTerreno } from './exterior.js?v=__V__';
 
 const I18N = {
   'pt-BR': {
@@ -84,6 +85,8 @@ function buildLayout() {
     W = Math.max(W, w); H += 6;
   }
   state.layout = { rooms, desks, W, H };
+  // formato da tela: o prédio fica no meio de um terreno (16:9 por padrão; "formato: livre" desliga)
+  state.view = calcularVista(W, H, office.aspect);
   buildNav();
 }
 
@@ -240,6 +243,7 @@ function buildStatic() {
   const c = document.createElement('canvas'); c.width = W * T; c.height = H * T;
   const s = c.getContext('2d');
   s.fillStyle = '#1b1f27'; s.fillRect(0, 0, c.width, c.height);
+  state.terreno = state.view.fora ? desenharTerreno(state.view, W * T, H * T, hashStr(state.snap.office.name || 'k')) : null;
   const tint = state.snap.theme && state.snap.theme.floorTint;
   for (const r of rooms) {
     const topo = temParede(r) ? 2 : 0;
@@ -837,6 +841,21 @@ function suor(x, topo) {
   pinta(x + 13, topo + 1 + Math.round(k * 4), 2, 3, '#7fc4f0'); pinta(x + 13, topo + Math.round(k * 4), 1, 1, '#b7dcf2');
 }
 // noite: escurece tudo, com a luz do monitor acesa em quem está na mesa
+// área externa: grama, calçada, árvores; à noite escurece e os postes acendem
+function desenhaTerreno() {
+  g.drawImage(state.terreno.canvas, 0, 0);
+  const k = escuridao();
+  if (k <= 0) return;
+  const { VW, VH } = state.view;
+  g.fillStyle = `rgba(10,16,38,${Math.min(0.85, k * 1.05).toFixed(3)})`; g.fillRect(0, 0, VW, VH);
+  for (const [x, y] of state.terreno.postes) {
+    for (const [r, a] of [[26, 0.06], [16, 0.08], [8, 0.12]]) {
+      g.fillStyle = `rgba(255,214,140,${(a * k * 1.6).toFixed(3)})`;
+      for (let dy = -r; dy <= r; dy++) { const m = Math.round(Math.sqrt(r * r - dy * dy)); g.fillRect(x - m, y + 10 + dy * 0.7, m * 2, 1); }
+    }
+    g.fillStyle = '#ffe7a8'; g.fillRect(x - 2, y, 5, 1);
+  }
+}
 function desenhaNoite() {
   const k = escuridao();
   if (k <= 0) return;
@@ -1241,6 +1260,8 @@ function frame(t) {
   atualizarVisitas(dt);
   g.imageSmoothingEnabled = false;
   g.setTransform(state.scale, 0, 0, state.scale, 0, 0);
+  if (state.terreno) desenhaTerreno();
+  g.setTransform(state.scale, 0, 0, state.scale, state.off.x, state.off.y);
   g.drawImage(state.staticLayer, 0, 0);
   if (state.luzJanelas && state.periodo !== 'noite') g.drawImage(state.luzJanelas, 0, 0);
   luzesBanheiro();
@@ -1261,7 +1282,9 @@ function frame(t) {
   desenhaNoite();
   desenhaCorreio(dt);
   desenhaConfete(dt);
-  drawEffect();
+  g.setTransform(state.scale, 0, 0, state.scale, 0, 0);
+  drawEffect(); // neve, folhas e morcegos caem na tela inteira, não só no prédio
+  g.setTransform(state.scale, 0, 0, state.scale, state.off.x, state.off.y);
   if (state.editing && state.editDraw) state.editDraw(g);
   g.setTransform(1, 0, 0, 1, 0, 0);
   moverOverlay();
@@ -1527,7 +1550,7 @@ function morcegos(W, H) {
 function drawEffect() {
   const ef = state.snap && state.snap.theme && state.snap.theme.effect;
   if (!ef) { state.particles.length = 0; return; }
-  const { W, H } = state.layout;
+  const W = state.view.VW / T, H = state.view.VH / T;
   if (ef === 'morcegos' || ef === 'bats') return morcegos(W, H);
   const max = Math.min(160, W * H / 3);
   const cores = ef === 'confetti' || ef === 'confete' ? ['#ff6b6b', '#f2c14e', '#4fa66a', '#4a7fd4', '#e26fa6'] : ef === 'leaves' || ef === 'folhas' ? ['#c9783b', '#e0a43a', '#a85a2a'] : ['#ffffff', '#e8f1ff'];
@@ -1543,17 +1566,21 @@ function drawEffect() {
 function resize() {
   if (!state.layout) return;
   const { W, H } = state.layout;
+  const { VW, VH, OX, OY } = state.view;
   // cabe inteiro na tela (largura e altura), em passos de 1/4 para os pixels ficarem uniformes;
   // em telas muito pequenas fica no mínimo 1,5x com rolagem, para os nomes continuarem legíveis
   const cs = getComputedStyle(stage);
   const livreW = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   const livreH = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-  let s = Math.min(livreW / (W * T), livreH / (H * T));
+  let s = Math.min(livreW / VW, livreH / VH);
   s = Math.max(1.5, Math.floor(s * 4) / 4);
   state.scale = s;
-  canvas.width = W * T * s; canvas.height = H * T * s;
+  state.off = { x: Math.round(OX * s), y: Math.round(OY * s) };
+  canvas.width = Math.round(VW * s); canvas.height = Math.round(VH * s);
   canvas.style.width = canvas.width + 'px'; canvas.style.height = canvas.height + 'px';
-  overlay.style.width = canvas.width + 'px'; overlay.style.height = canvas.height + 'px';
+  // nomes e áreas de clique ficam só sobre o prédio
+  overlay.style.inset = 'auto'; overlay.style.left = state.off.x + 'px'; overlay.style.top = state.off.y + 'px';
+  overlay.style.width = W * T * s + 'px'; overlay.style.height = H * T * s + 'px';
   overlay.style.setProperty('--s', s);
   placeOverlay();
 }
