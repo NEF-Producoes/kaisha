@@ -1,0 +1,86 @@
+# Tema de Halloween (Dia das Bruxas) · aparece sozinho de 15 a 31 de outubro
+nome: Halloween
+titulo: "Feliz Dia das Bruxas! 🎃"
+periodo: { de: "10-15", ate: "10-31" }
+efeito: morcegos
+floor_tint: "rgba(70,30,90,0.10)"
+
+enfeites:
+  - { sprite: bandeirolas, ponto: teto }                 # varal laranja e preto ao longo do topo
+  - { sprite: teia, ponto: parede, cada: 5, offset: 1 }  # teia com aranha
+  - { sprite: morcego, ponto: parede, cada: 7, offset: 4 }
+  - { sprite: abobora, ponto: canto }                    # abóbora acesa num canto de cada sala
+  - { sprite: vela, ponto: mesa }
+  - { sprite: chapeu, ponto: cabeca }                    # chapéu de bruxa em todo mundo
+
+desenhos:
+  bandeirolas:
+    paleta: { c: "#3a2f28", o: "#f0883e", O: "#c0652a", k: "#22202a", K: "#3b3448" }
+    pixels:
+      - "cccccccccccccccc"
+      - ".oooo....kkkk..."
+      - ".oOOo....kKKk..."
+      - "..oo......kk...."
+      - "..o........k...."
+  teia:
+    paleta: { w: "#d9dde3", W: "#a9b0ba", k: "#1b1b22", r: "#d9534f" }
+    pixels:
+      - "w....w....w."
+      - ".W...w...W.."
+      - "..wWWwWWw..."
+      - "..W..w..W..."
+      - ".wWWWwWWWw.."
+      - ".W...w...W.."
+      - "W....w....W."
+      - ".....w......"
+      - ".....w......"
+      - "....kkk....."
+      - "...kkrkk...."
+      - "..k.kkk.k..."
+      - "...k...k...."
+  morcego:
+    paleta: { k: "#22202a", K: "#3b3448", r: "#ff5c5c" }
+    pixels:
+      - "k..........k"
+      - "kk...kk...kk"
+      - "kKk.kkkk.kKk"
+      - "kKKkkrrkkKKk"
+      - ".kKKkkkkKKk."
+      - "..kk.kk.kk.."
+  abobora:
+    paleta: { g: "#4fa66a", G: "#2f7a3d", o: "#f0883e", O: "#c0652a", y: "#ffd84a", Y: "#ffb02e" }
+    pixels:
+      - "......gG......"
+      - ".....Gg......."
+      - "..OOooOOooOO.."
+      - ".OoooOoooOoooO"
+      - "OooyyoOoyyoooO"
+      - "OoyYyoOoyYyooO"
+      - "OoooooOooooooO"
+      - "OooooyyyooooO."
+      - "OoyoyYyYyoyoO."
+      - ".OoyyyyyyyooO."
+      - "..OOooOOooOO.."
+      - "....OOOOOO...."
+  vela:
+    paleta: { y: "#ffd84a", o: "#f0883e", w: "#f2efe6", W: "#cfc8b8", k: "#3a2f28" }
+    pixels:
+      - ".y."
+      - "yoy"
+      - ".k."
+      - "www"
+      - "wwW"
+      - "wwW"
+      - "wwW"
+      - "WWW"
+  chapeu:
+    paleta: { k: "#2a2238", K: "#3e3352", p: "#8a63d2", y: "#ffd84a" }
+    pixels:
+      - "......kk...."
+      - ".....kKk...."
+      - "....kKKk...."
+      - "....kKKkk..."
+      - "...kKKKKk..."
+      - "...pppppp..."
+      - "...ppyppp..."
+      - "kkkkkkkkkkkk"

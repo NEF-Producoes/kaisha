@@ -1484,10 +1484,38 @@ function desenhaCorreio(dt) {
 }
 
 // neve, confete e folhas (efeitos de tema)
+// Halloween: alguns morcegos atravessam a tela batendo as asas, e umas folhas secas caem
+function morcegos(W, H) {
+  const ps = state.particles;
+  const nM = Math.max(3, Math.min(9, (W * H / 40) | 0));
+  if (!ps.length || ps[0].morcego === undefined) {
+    ps.length = 0;
+    for (let i = 0; i < nM; i++) ps.push({ morcego: true, x: Math.random() * W * T, y: Math.random() * H * T * 0.7, v: (0.4 + Math.random() * 0.6) * (Math.random() < 0.5 ? -1 : 1), f: Math.random() * 6.28, a: Math.random() * 6.28 });
+    for (let i = 0; i < 40; i++) ps.push({ morcego: false, x: Math.random() * W * T, y: Math.random() * H * T, v: 0.2 + Math.random() * 0.4, d: Math.random() * 6.28, c: ['#c9783b', '#8a4a2a', '#6b3f7a'][i % 3] });
+  }
+  for (const p of ps) {
+    if (!p.morcego) {
+      p.y += p.v; p.d += 0.03; p.x += Math.sin(p.d) * 0.3;
+      if (p.y > H * T) { p.y = -4; p.x = Math.random() * W * T; }
+      g.fillStyle = p.c; g.fillRect(p.x | 0, p.y | 0, 1, 1); continue;
+    }
+    p.x += p.v; p.a += 0.02; p.f += 0.35;
+    const y = (p.y + Math.sin(p.a) * 6) | 0;
+    if (p.x < -10) p.x = W * T + 8; if (p.x > W * T + 10) p.x = -8;
+    const x = p.x | 0; const asa = Math.sin(p.f) > 0 ? -2 : 1;
+    g.fillStyle = '#1c1824';
+    g.fillRect(x - 1, y, 3, 2);                 // corpo
+    g.fillRect(x - 4, y + asa, 3, 1); g.fillRect(x - 3, y + (asa < 0 ? -1 : 1), 2, 1); // asa esquerda
+    g.fillRect(x + 2, y + asa, 3, 1); g.fillRect(x + 2, y + (asa < 0 ? -1 : 1), 2, 1); // asa direita
+    g.fillStyle = '#ff5c5c'; g.fillRect(x - 1, y, 1, 1); g.fillRect(x + 1, y, 1, 1);  // olhinhos
+  }
+}
+
 function drawEffect() {
   const ef = state.snap && state.snap.theme && state.snap.theme.effect;
   if (!ef) { state.particles.length = 0; return; }
   const { W, H } = state.layout;
+  if (ef === 'morcegos' || ef === 'bats') return morcegos(W, H);
   const max = Math.min(160, W * H / 3);
   const cores = ef === 'confetti' || ef === 'confete' ? ['#ff6b6b', '#f2c14e', '#4fa66a', '#4a7fd4', '#e26fa6'] : ef === 'leaves' || ef === 'folhas' ? ['#c9783b', '#e0a43a', '#a85a2a'] : ['#ffffff', '#e8f1ff'];
   while (state.particles.length < max) state.particles.push({ x: Math.random() * W * T, y: Math.random() * H * T - H * T, v: 0.25 + Math.random() * 0.5, d: Math.random() * 6.28, c: cores[(Math.random() * cores.length) | 0] });

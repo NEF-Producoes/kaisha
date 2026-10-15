@@ -169,7 +169,7 @@ function loadThemesFrom(dir, origem, out, erros) {
         effect: t.effect || null, title: t.title || null,
         decorations: Array.isArray(t.decorations) ? t.decorations : [],
         sprites: t.sprites && typeof t.sprites === 'object' ? t.sprites : {},
-        floorTint: t.floor_tint || null,
+        floorTint: t.floor_tint || t.piso_tom || null,
       });
     } catch (e) {
       erros.push(`tema ${ent.name}: ${e.message.split('\n')[0]}`);

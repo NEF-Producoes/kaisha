@@ -10,7 +10,7 @@ Um tema é uma pasta em `themes/` com um `theme.yaml`. Não precisa mexer em có
 nome: Halloween
 titulo: "Feliz Halloween!"        # faixa no topo do painel (opcional)
 periodo: { de: "10-25", ate: "10-31" }
-efeito: folhas                    # neve, confete, folhas (opcional)
+efeito: folhas                    # neve, confete, folhas, morcegos (opcional)
 
 enfeites:
   - { sprite: teia,    ponto: teto }

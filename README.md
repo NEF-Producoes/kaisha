@@ -9,7 +9,7 @@ Cada agente tem uma mesa. Quando ele começa uma tarefa, o boneco digita, o moni
 
 - **Funciona com qualquer coisa** que faça uma chamada HTTP: n8n, scripts, cron, Claude Code, OpenClaw, seu backend.
 - **Escritório em um arquivo** (`office.yaml`): salas, mesas, móveis. Salvou, o painel muda na hora, sem recarregar a página.
-- **Decoração por data**: Natal, Festa Junina e outras datas mudam o escritório sozinhas. Temas novos são uma pasta com um arquivo de texto.
+- **Decoração por data**: Natal, Festa Junina, Halloween e outras datas mudam o escritório sozinhas. Temas novos são uma pasta com um arquivo de texto.
 - **Leve**: Node.js 22, SQLite embutido, sem Redis, sem banco externo. Um volume para os dados.
 
 ## Subindo no EasyPanel
@@ -141,6 +141,7 @@ Cada andar é um escritório separado, com planta, agentes, placar do dia e chav
 | --- | --- | --- | --- |
 | Natal | 1 a 26 de dezembro | ![Natal](docs/tema-natal.png) | luzinhas, guirlandas, árvore, presentes, gorro e neve |
 | Festa Junina | 1º de junho a 31 de julho | ![Junina](docs/tema-junina.png) | bandeirinhas, lanternas, fogueira, milho e chapéu de palha |
+| Halloween | 15 a 31 de outubro | ![Halloween](docs/tema-halloween.png) | bandeirolas laranja e preto, teias com aranha, morcegos, abóboras acesas, velas, chapéu de bruxa e morcegos voando |
 
 Datas móveis (Carnaval, Páscoa, Black Friday) são calculadas a cada ano. Para criar um tema, veja o [CONTRIBUTING](CONTRIBUTING.md): é uma pasta com um `theme.yaml`, e os desenhos são texto. Temas próprios podem ficar em `/data/themes/` sem mexer na imagem.
 

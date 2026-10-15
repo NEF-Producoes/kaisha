@@ -9,7 +9,7 @@ Every agent gets a desk. When it starts a task the character types, the monitor 
 
 - **Works with anything** that can make an HTTP call: n8n, scripts, cron, Claude Code, OpenClaw, your backend.
 - **The office is one file** (`office.yaml`): rooms, desks, furniture. Save it and every open browser redraws instantly.
-- **Seasonal decoration**: Christmas, Festa Junina and other dates change the office on their own. A new theme is a folder with a text file.
+- **Seasonal decoration**: Christmas, Festa Junina, Halloween and other dates change the office on their own. A new theme is a folder with a text file.
 - **Light**: Node.js 22, built-in SQLite, no Redis, no external database. One volume for data.
 
 ## Deploy on EasyPanel
@@ -52,7 +52,7 @@ Config keys work in English or Portuguese (`rooms`/`salas`, `agents`/`agentes`, 
 
 ## Themes
 
-Themes live in `themes/<id>/theme.yaml` (or `/data/themes/` for your own). Fixed or movable dates (Easter, Carnival, Black Friday), decorations placed on walls, ceilings, corners, desks and heads, sprites drawn as text, and effects (`snow`, `confetti`, `leaves`). See [CONTRIBUTING](CONTRIBUTING.md).
+Themes live in `themes/<id>/theme.yaml` (or `/data/themes/` for your own). Fixed or movable dates (Easter, Carnival, Black Friday), decorations placed on walls, ceilings, corners, desks and heads, sprites drawn as text, and effects (`snow`, `confetti`, `leaves`, `bats`). See [CONTRIBUTING](CONTRIBUTING.md).
 
 ## License
 
