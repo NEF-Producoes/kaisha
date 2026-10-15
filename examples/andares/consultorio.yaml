@@ -29,6 +29,7 @@ moveis:
   - { tipo: sofa,      pos: [7, 10] }
   - { tipo: bebedouro, pos: [10, 9] }
   - { tipo: planta,    pos: [0, 13] }
+  - { tipo: banheiro,  pos: [11, 11] }
   - { tipo: arquivo,   pos: [14, 10] }
   - { tipo: arquivo,   pos: [16, 10] }
   - { tipo: grafico,   pos: [20, 10] }

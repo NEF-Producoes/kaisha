@@ -9,6 +9,8 @@ const I18N = {
     connected: 'ao vivo', reconnecting: 'reconectando…', noHistory: 'Sem eventos ainda.', configError: 'Erro na configuração',
     ago: (s) => (s < 60 ? 'agora' : s < 3600 ? `há ${Math.floor(s / 60)} min` : s < 86400 ? `há ${Math.floor(s / 3600)} h` : `há ${Math.floor(s / 86400)} d`),
     theme: 'Tema', agents: 'agentes', today: 'HOJE', success: 'Sucesso', question: 'Pergunta', inWaiting: 'na espera',
+    needs: { sede: 'Sede', banheiro: 'Banheiro', social: 'Papo', diversao: 'Diversão', cansaco: 'Cansaço' },
+    doing: { beber: 'tomando um café ou água', banheiro: 'no banheiro', celular: 'no celular, no sofá', ler: 'lendo um livro', cochilar: 'cochilando no sofá', papo: 'batendo papo', indo: 'indo', livre: 'à toa', mesa: 'trabalhando na mesa', fixo: 'não sai da mesa' }, now: 'Agora',
   },
   en: {
     working: 'Working', waiting: 'Waiting', idle: 'Idle', error: 'Error', offline: 'Offline',
@@ -16,6 +18,8 @@ const I18N = {
     connected: 'live', reconnecting: 'reconnecting…', noHistory: 'No events yet.', configError: 'Configuration error',
     ago: (s) => (s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`),
     theme: 'Theme', agents: 'agents', today: 'TODAY', success: 'Success', question: 'Question', inWaiting: 'waiting room',
+    needs: { sede: 'Thirst', banheiro: 'Bathroom', social: 'Chat', diversao: 'Fun', cansaco: 'Tiredness' },
+    doing: { beber: 'having coffee or water', banheiro: 'in the bathroom', celular: 'on the phone, on the couch', ler: 'reading a book', cochilar: 'napping on the couch', papo: 'chatting', indo: 'on the way', livre: 'idling', mesa: 'working at the desk', fixo: 'stays at the desk' }, now: 'Now',
   },
 };
 let L = I18N['pt-BR'];
@@ -109,6 +113,26 @@ function buildNav() {
       for (let x = 0; x < tw; x++) { pois.push([f.pos[0] + x, f.pos[1] + th]); if (key === 'cafe' || key === 'bebedouro') cafes.push([f.pos[0] + x, f.pos[1] + th]); }
   }
   for (const d of desks) for (const dx of [0, 1]) { block(d.x + dx, d.y); block(d.x + dx, d.y - 1); }
+  // lugares das vontades: água/café, sofás (fora da sala de espera), banheiros e estantes
+  const ok = (x, y) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x];
+  const espera = rooms.findIndex((r) => r.kind === 'waiting');
+  const lugares = { agua: [], sofas: [], banheiros: [], estantes: [] };
+  (state.snap.office.furniture || []).forEach((f, fi) => {
+    const key = furnitureKey(f.type), def = key && furniture(key);
+    if (!def) return;
+    const tw = Math.ceil(def.w / T), th = Math.ceil(def.h / T), fy = f.pos[1] + th;
+    for (let x = f.pos[0]; x < f.pos[0] + tw; x++) {
+      if (!ok(x, fy)) continue;
+      const frente = fy * W + x;
+      if (key === 'cafe' || key === 'bebedouro') lugares.agua.push({ tile: frente, tipo: key });
+      else if (key === 'estante') lugares.estantes.push(frente);
+      else if (key === 'sofa' && (espera < 0 || floor[f.pos[1] * W + x] !== espera)) lugares.sofas.push({ frente, px: x * T + 8, py: f.pos[1] * T + 13 });
+    }
+    if (key === 'banheiro') {
+      const fx = [f.pos[0], f.pos[0] + tw - 1].find((x) => ok(x, fy));
+      if (fx != null) lugares.banheiros.push({ id: fi, frente: fy * W + fx, x: f.pos[0], y: f.pos[1] });
+    }
+  });
   // passagens: em planta aberta, cada divisa entre duas salas ganha uma abertura de 2 blocos no meio
   const doors = new Set();
   const edges = []; // divisórias para desenhar: { x, y, v (vertical?), door }
@@ -146,7 +170,8 @@ function buildNav() {
     comps.push(lista);
   }
   state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x),
-    cafes: cafes.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x) };
+    cafes: cafes.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x), lugares };
+  state.slots = new Map(); // lugar reservado -> agente (um por cadeira de sofá, ponto do bebedouro, banheiro…)
 }
 function vizinhos(i, W, H) {
   const x = i % W, y = (i / W) | 0, out = [];
@@ -324,6 +349,9 @@ function syncEntities() {
         Object.assign(e, { mode: 'pause', x: p.x, y: p.y, timer: rnd(300, 3000) });
       }
     }
+    // vontades: começam sorteadas para cada um ter o seu ritmo; o escritório foi refeito, então ninguém está no meio de nada
+    if (!e.vont) e.vont = { sede: rnd(0, 60), banheiro: rnd(0, 40), social: rnd(0, 60), diversao: rnd(0, 60), cansaco: rnd(0, 30) };
+    if (e.atv || e.mode === 'atividade') { e.atv = null; e.indo = false; e.oculto = false; if (e.mode === 'atividade') { e.mode = 'pause'; e.timer = rnd(500, 1500); } }
     // se a mesa mudou de lugar com o agente sentado, ele vai junto
     if (e.mode === 'seated') { e.x = seat.x; e.y = seat.y; }
     else if (!state.nav.walk[blocoDe(e.x, e.y)]) sentar(e);
@@ -359,6 +387,7 @@ function passear(e) {
   e.path = p; e.mode = 'walk'; e.poi = pois.includes(alvo);
 }
 function irParaMesa(e, calmo = false) {
+  if (e.atv) terminar(e);
   // dia de atendimento: antes de ir para a mesa, busca o paciente na sala de espera
   if (!calmo && buscarPaciente(e)) return;
   const aqui = blocoDe(e.x, e.y);
@@ -367,6 +396,7 @@ function irParaMesa(e, calmo = false) {
   e.path = p; e.mode = calmo ? 'voltar' : 'run';
 }
 function chamar(e) {
+  if (e.atv) terminar(e); // larga o que estava fazendo (sai do banheiro, levanta do sofá…)
   // a tarefa sai da mesa do agente central (o Musashi) e chega no celular de quem vai fazer
   const central = [...state.ents.values()].find((x) => x.agent.central && x !== e);
   const voo = central ? 700 : 0;
@@ -383,6 +413,7 @@ function comemorar(e, tarefa) {
   if (e.mode === 'celebrate') return; // já está comemorando: uma festa só
   // quem fica na mesa comemora sem sair dela
   if (naMesa(e.agent)) { if (!state.festaCentral || Date.now() - state.festaCentral > 1500) { state.festaCentral = Date.now(); confete(e.desk.x * T + 16, e.desk.y * T + 2, e.look.shirt[0]); } return; }
+  if (e.atv) terminar(e);
   if (e.mode === 'seated') levantar(e);
   if (e.seat.entrada < 0 && e.mode === 'seated') return;
   e.mode = 'celebrate'; e.timer = 2600; e.path = []; e.facing = 'down';
@@ -403,6 +434,130 @@ function irAoCafe(e) {
   const p = opcoes.length ? caminho(aqui, opcoes[(Math.random() * opcoes.length) | 0]) : null;
   if (p && p.length) { e.path = p; e.mode = 'walk'; e.poi = true; } else { e.mode = 'pause'; e.timer = rnd(800, 2000); }
 }
+// ---------- vontades (o que cada um faz quando está livre) ----------
+// cada agente tem necessidades que sobem com o tempo (0 a 100). Livre, ele atende a mais urgente:
+// sede → bebedouro/café; banheiro → banheiro; papo → conversa com outro agente livre;
+// diversão → celular no sofá ou um livro na estante; cansaço → cochilo no sofá.
+// Tarefa de verdade sempre manda: ele larga tudo e corre para a mesa.
+const VONTADE = 50; // a partir daqui a necessidade vira vontade
+// ?pressa no endereço acelera as vontades 20x (para testar e para se divertir)
+const PRESSA = new URLSearchParams(location.search).has('pressa') ? 20 : 1;
+if (PRESSA > 1) window.kaisha = state; // para inspecionar no console
+function envelhecer(e, st, dt) {
+  const v = e.vont, m = (dt / 60000) * PRESSA, livre = !ATIVO.has(st);
+  v.sede = Math.min(100, v.sede + m * (st === 'working' ? 9 : 7));
+  v.banheiro = Math.min(100, v.banheiro + m * 2.5);
+  v.cansaco = Math.max(0, Math.min(100, v.cansaco + m * (st === 'working' ? 6 : 0.6)));
+  const conversando = e.atv && e.atv.tipo === 'papo' && e.mode === 'atividade';
+  if (livre && !conversando) v.social = Math.min(100, v.social + m * 6);
+  if (livre && !e.atv) v.diversao = Math.min(100, v.diversao + m * 5);
+}
+function decidir(e) {
+  const v = e.vont, nav = state.nav;
+  if (!v || !nav.lugares) { passear(e); return; }
+  const opcoes = [];
+  if (v.banheiro > VONTADE + 5) opcoes.push(['banheiro', v.banheiro + 10]);
+  if (v.sede > VONTADE) opcoes.push(['beber', v.sede]);
+  if (v.cansaco > 70) opcoes.push(['cochilar', v.cansaco - 5]);
+  if (v.social > VONTADE) opcoes.push(['papo', v.social]);
+  if (v.diversao > VONTADE) opcoes.push(['celular', v.diversao], ['ler', v.diversao - 12]);
+  // um pouco de sorte para ninguém ficar previsível demais
+  const ordem = opcoes.map(([t, p]) => [t, p + Math.random() * 15]).sort((a, b) => b[1] - a[1]);
+  for (const [tipo] of ordem) if (comecar(e, tipo)) return;
+  passear(e);
+}
+function comecar(e, tipo) {
+  const L2 = state.nav.lugares, aqui = blocoDe(e.x, e.y);
+  const area = new Set(areaDoAgente(e, aqui));
+  if (tipo === 'papo') return comecarPapo(e, aqui, area);
+  let alvos = [];
+  if (tipo === 'beber') alvos = L2.agua.map((a) => ({ key: 'a:' + a.tile, tile: a.tile, extra: { bebida: a.tipo } }));
+  else if (tipo === 'banheiro') alvos = L2.banheiros.map((b) => ({ key: 'wc:' + b.id, tile: b.frente, extra: { wc: b } }));
+  else if (tipo === 'celular' || tipo === 'cochilar') alvos = L2.sofas.map((s) => ({ key: 's:' + s.px + ':' + s.py, tile: s.frente, extra: { sofa: s } }));
+  else if (tipo === 'ler') alvos = L2.estantes.map((t) => ({ key: 'e:' + t, tile: t }));
+  let melhor = null;
+  for (const a of alvos) {
+    if (!area.has(a.tile) || state.slots.has(a.key)) continue;
+    const p = caminho(aqui, a.tile);
+    if (p && (!melhor || p.length < melhor.p.length)) melhor = { a, p };
+  }
+  if (!melhor) return false;
+  state.slots.set(melhor.a.key, e.id);
+  e.atv = { tipo, key: melhor.a.key, ...(melhor.a.extra || {}) };
+  e.path = melhor.p; e.mode = 'walk'; e.poi = false; e.indo = true;
+  return true;
+}
+function comecarPapo(e, aqui, area) {
+  const { W, walk, pass } = state.nav;
+  const cands = [...state.ents.values()].filter((o) => o !== e && !o.atv && o.vont && !naMesa(o.agent) && ['pause', 'walk'].includes(o.mode)
+    && !ATIVO.has(statusOf(o.id)) && area.has(blocoDe(o.x, o.y)));
+  cands.sort((a, b) => b.vont.social - a.vont.social);
+  for (const o of cands.slice(0, 3)) {
+    const ot = blocoDe(o.x, o.y);
+    // de preferência um em cima do outro, para as placas de nome não se encavalarem
+    const lados = [ot + W, ot - W, ot - 1, ot + 1].filter((i) => i >= 0 && i < walk.length && walk[i] && pass(ot, i) && area.has(i));
+    let melhor = null;
+    for (const t of lados) { const p = caminho(aqui, t); if (p && (!melhor || p.length < melhor.p.length)) melhor = { p }; }
+    if (!melhor) continue;
+    // o outro para onde está e espera
+    Object.assign(o, centroBloco(ot), { path: [], mode: 'atividade', atv: { tipo: 'esperaPapo', com: e.id }, timer: 25000, indo: false });
+    e.atv = { tipo: 'papo', com: o.id };
+    e.path = melhor.p; e.mode = 'walk'; e.poi = false; e.indo = true;
+    return true;
+  }
+  return false;
+}
+const virarPara = (e, o) => (Math.abs(o.x - e.x) >= Math.abs(o.y - e.y) ? (o.x > e.x ? 'right' : 'left') : (o.y > e.y ? 'down' : 'up'));
+function chegouAtividade(e) {
+  const a = e.atv; e.indo = false; e.path = [];
+  if (!a) { e.mode = 'pause'; e.timer = rnd(800, 2000); return; }
+  e.mode = 'atividade'; e.step = 0; e.inicio = Date.now();
+  if (a.tipo === 'beber') { e.timer = rnd(6000, 10000); e.facing = 'down'; }
+  else if (a.tipo === 'banheiro') { e.timer = rnd(14000, 26000); e.oculto = true; }
+  else if (a.tipo === 'celular' || a.tipo === 'cochilar') { e.x = a.sofa.px; e.y = a.sofa.py; e.facing = 'down'; e.timer = a.tipo === 'cochilar' ? rnd(20000, 40000) : rnd(15000, 30000); }
+  else if (a.tipo === 'ler') { e.timer = rnd(10000, 18000); e.facing = 'down'; }
+  else if (a.tipo === 'papo') {
+    const o = state.ents.get(a.com);
+    if (!o || !o.atv || o.atv.com !== e.id || o.mode !== 'atividade') { e.atv = null; e.mode = 'pause'; e.timer = rnd(800, 2000); return; }
+    const dur = rnd(9000, 16000);
+    e.timer = dur; o.timer = dur + 50; o.atv.tipo = 'papo'; o.inicio = e.inicio; o.step = 0;
+    e.facing = virarPara(e, o); o.facing = virarPara(o, e);
+    // cada conversa tem os seus assuntos
+    const assuntos = ['💬', '😂', '☕', '👍', '🤔', '⚽', '🎮', '🍕', '📈', '🐱', '🎵', '🙄', '😮', '💡'];
+    const embaralha = assuntos.map((x) => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map((p) => p[1]).slice(0, 5);
+    a.assuntos = embaralha; o.atv.assuntos = embaralha; a.fala = true; o.atv.fala = false;
+  }
+}
+// sai da atividade (terminou ou foi chamado): libera o lugar e volta para o chão
+function terminar(e) {
+  const a = e.atv;
+  if (!a) return;
+  if (a.key && state.slots.get(a.key) === e.id) state.slots.delete(a.key);
+  if (a.sofa && e.mode === 'atividade') Object.assign(e, centroBloco(a.sofa.frente));
+  if (a.wc && e.oculto) Object.assign(e, centroBloco(a.wc.frente), { facing: 'down' });
+  if (a.com) {
+    const o = state.ents.get(a.com);
+    if (o && o.atv && o.atv.com === e.id) { o.atv = null; o.indo = false; if (o.mode === 'atividade' || o.mode === 'walk') { o.mode = 'pause'; o.path = []; o.timer = rnd(800, 2500); } }
+  }
+  e.atv = null; e.indo = false; e.oculto = false;
+}
+function concluir(e) {
+  const a = e.atv, v = e.vont;
+  if (a && v) {
+    if (a.tipo === 'beber') { v.sede = rnd(0, 8); v.banheiro = Math.min(100, v.banheiro + 30); if (a.bebida === 'cafe') v.cansaco = Math.max(0, v.cansaco - 25); }
+    else if (a.tipo === 'banheiro') v.banheiro = rnd(0, 5);
+    else if (a.tipo === 'celular') { v.diversao = rnd(0, 10); v.cansaco = Math.max(0, v.cansaco - 10); }
+    else if (a.tipo === 'ler') v.diversao = rnd(5, 15);
+    else if (a.tipo === 'cochilar') v.cansaco = rnd(0, 10);
+    else if (a.tipo === 'papo') {
+      for (const x of [e, state.ents.get(a.com)]) if (x && x.vont) { x.vont.social = rnd(0, 8); x.vont.diversao = Math.max(0, x.vont.diversao - 15); }
+    }
+  }
+  terminar(e);
+  e.mode = 'pause'; e.timer = rnd(1500, 4000);
+}
+const FAZENDO = { beber: 'beber', banheiro: 'banheiro', celular: 'celular', ler: 'ler', cochilar: 'cochilar', papo: 'papo', esperaPapo: 'papo' };
+
 // erro: o inspetor (ex.: Sentinela) vai até a mesa de quem falhou
 function chamarInspetor(alvo) {
   const insp = [...state.ents.values()].find((x) => x.agent.inspector && x !== alvo);
@@ -410,6 +565,7 @@ function chamarInspetor(alvo) {
   const { W, walk, comp } = state.nav;
   const ent = alvo.seat.entrada;
   if (ent < 0) return;
+  if (insp.atv) terminar(insp);
   if (insp.mode === 'seated') levantar(insp);
   const aqui = blocoDe(insp.x, insp.y);
   const perto = [ent + 2, ent - 1, ent + W, ent + W + 1, ent].filter((i) => i >= 0 && i < walk.length && walk[i] && comp[i] === comp[aqui]);
@@ -451,6 +607,7 @@ function atualizar(dt) {
     const st = statusOf(e.id);
     if (st !== e.last) mudouStatus(e, st);
     const ativo = ATIVO.has(st);
+    if (e.vont) envelhecer(e, st, dt);
     switch (e.mode) {
       case 'seated':
         if (!ativo && !naMesa(e.agent)) { e.timer -= dt; if (e.timer <= 0) levantar(e); }
@@ -458,19 +615,30 @@ function atualizar(dt) {
       case 'pause':
         if (ativo) { chamar(e); break; }
         if (naMesa(e.agent)) { irParaMesa(e, true); break; }
-        e.timer -= dt; if (e.timer <= 0) passear(e);
+        e.timer -= dt; if (e.timer <= 0) decidir(e);
         break;
       case 'walk':
         if (ativo) { chamar(e); break; }
         if (naMesa(e.agent)) { irParaMesa(e, true); break; }
-        if (andar(e, dt, VEL.walk)) { e.mode = 'pause'; e.timer = e.poi ? rnd(3000, 8000) : rnd(1200, 5000); e.facing = e.poi ? 'up' : e.facing; }
+        if (andar(e, dt, VEL.walk)) {
+          if (e.indo) chegouAtividade(e);
+          else { e.mode = 'pause'; e.timer = e.poi ? rnd(3000, 8000) : rnd(1200, 5000); e.facing = e.poi ? 'up' : e.facing; }
+        }
+        break;
+      case 'atividade':
+        if (ativo) { chamar(e); break; }
+        if (!e.atv || naMesa(e.agent)) { terminar(e); e.mode = 'pause'; e.timer = rnd(500, 1500); break; }
+        e.step += dt / 1000;
+        if (e.atv.tipo === 'esperaPapo' || e.atv.tipo === 'papo') { const o = state.ents.get(e.atv.com); if (o) e.facing = virarPara(e, o); }
+        e.timer -= dt; if (e.timer <= 0) concluir(e);
         break;
       case 'ring':
         e.timer -= dt; if (e.timer <= 0) irParaMesa(e);
         break;
       case 'celebrate':
         e.timer -= dt; e.step += dt / 1000;
-        if (e.timer <= 0) irAoCafe(e);
+        // depois da festa, a sede bate
+        if (e.timer <= 0) { if (e.vont) { e.vont.sede = Math.max(e.vont.sede, 65); decidir(e); } else irAoCafe(e); }
         break;
       case 'visit':
         if (ativo) { chamar(e); break; }
@@ -736,6 +904,7 @@ function frame(t) {
   g.imageSmoothingEnabled = false;
   g.setTransform(state.scale, 0, 0, state.scale, 0, 0);
   g.drawImage(state.staticLayer, 0, 0);
+  luzesBanheiro();
   const heads = decorations('head');
   // monitores (o status aparece na tela mesmo com o agente a caminho)
   for (const e of state.ents.values()) drawMonitor(g, e.desk.x * T + 8, e.desk.y * T - 8, statusOf(e.id), tick + (hashStr(e.id) % 7));
@@ -757,6 +926,7 @@ function frame(t) {
 }
 
 function desenhaAgente(e, heads) {
+  if (e.oculto) return; // no banheiro
   const st = statusOf(e.id);
   g.globalAlpha = st === 'offline' ? 0.55 : 1;
   let topo;
@@ -773,9 +943,11 @@ function desenhaAgente(e, heads) {
     // comemorando: pulinhos
     const quica = e.mode === 'celebrate' ? -Math.round(Math.abs(Math.sin(e.step * 7)) * 7) : andando && fr === 1 ? -1 : 0;
     const x = Math.round(e.x - 8), y = Math.round(e.y - 20 + quica);
-    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2);
+    const noSofa = e.mode === 'atividade' && e.atv && e.atv.sofa;
+    if (!noSofa) { g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2); }
     g.drawImage(walkerSprite(e.look, e.facing, fr), x, y);
     topo = y;
+    if (e.mode === 'atividade' && e.atv) desenhaAtividade(e, x, y);
     if (e.mode === 'celebrate') bracosParaCima(x, y, e.look);
     if (e.mode === 'inspect') lupa(Math.round(e.x) + 5, y + 7);
     if (e.mode === 'ring') {
@@ -790,6 +962,54 @@ function desenhaAgente(e, heads) {
   for (const h of heads) { const sp = themeSprite(h.sprite); g.drawImage(sp, Math.round(e.mode === 'seated' ? e.desk.x * T + 16 : e.x) - (sp.width >> 1), topo - sp.height + 3); }
   if (st === 'error') nuvem(e.mode === 'seated' ? e.desk.x * T + 16 : e.x, topo);
   g.globalAlpha = 1;
+}
+
+// o que aparece na mão (ou sobre a cabeça) durante cada vontade
+const pinta = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+function desenhaAtividade(e, x, y) {
+  const a = e.atv;
+  if (a.tipo === 'beber') {
+    const cx = x + 11, cy = y + 10;
+    if (a.bebida === 'cafe') {
+      pinta(cx, cy, 4, 4, '#f2efe6'); pinta(cx, cy, 4, 1, '#6b3e1e'); pinta(cx + 4, cy + 1, 1, 2, '#f2efe6');
+      pinta(cx + 1 + (tick % 4 < 2 ? 0 : 1), cy - 3 - (tick % 2), 1, 2, 'rgba(255,255,255,0.55)');
+    } else { pinta(cx, cy, 3, 4, '#e8f1ff'); pinta(cx, cy + 1, 3, 2, '#7fc4f0'); }
+  } else if (a.tipo === 'celular') {
+    pinta(x + 6, y + 10, 4, 5, '#22252b'); pinta(x + 7, y + 11, 2, 3, tick % 7 < 6 ? '#7fd1ff' : '#4fa66a');
+    // de vez em quando ri do que está vendo
+    const k = Math.floor(e.step / 4);
+    if (k % 3 === 2) balao(x + 8, y, ['😂', '😍', '👀', '🤣', '😮'][(hashStr(e.id) + k) % 5]);
+  } else if (a.tipo === 'cochilar') {
+    for (let i = 0; i < 3; i++) {
+      const k = (e.step * 0.6 + i / 3) % 1, zx = x + 10 + Math.round(k * 6), zy = y - 1 - Math.round(k * 12), c = `rgba(214,222,235,${(1 - k).toFixed(2)})`;
+      pinta(zx, zy, 3, 1, c); pinta(zx + 1, zy + 1, 1, 1, c); pinta(zx, zy + 2, 3, 1, c);
+    }
+  } else if (a.tipo === 'ler') {
+    const capa = ['#c0504d', '#4f81bd', '#9bbb59', '#8064a2'][hashStr(e.id) % 4];
+    pinta(x + 3, y + 10, 10, 5, capa); pinta(x + 4, y + 10, 4, 4, '#f7f3ea'); pinta(x + 8, y + 10, 4, 4, '#f7f3ea'); pinta(x + 8, y + 10, 1, 5, capa);
+  } else if (a.tipo === 'papo' && a.assuntos) {
+    // falam um de cada vez
+    const fase = Math.floor((Date.now() - (e.inicio || 0)) / 1800);
+    if ((fase % 2 === 0) === !!a.fala) balao(x + 8, y, a.assuntos[Math.floor(fase / 2) % a.assuntos.length]);
+  }
+}
+// balão de fala com um emoji
+function balao(cx, topo, emoji) {
+  const bx = Math.round(cx) - 7, by = topo - 15;
+  pinta(bx, by + 1, 14, 9, '#ffffff'); pinta(bx + 1, by, 12, 11, '#ffffff'); pinta(bx + 5, by + 11, 2, 1, '#ffffff'); pinta(bx + 5, by + 12, 1, 1, '#ffffff');
+  g.font = '8px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#1b1f27';
+  g.fillText(emoji, bx + 7, by + 6);
+}
+// luz da porta do banheiro: vermelha com alguém lá dentro
+function luzesBanheiro() {
+  const L2 = state.nav && state.nav.lugares;
+  if (!L2 || !L2.banheiros.length) return;
+  for (const b of L2.banheiros) {
+    const ocupado = [...state.ents.values()].some((e) => e.oculto && e.atv && e.atv.key === 'wc:' + b.id);
+    pinta(b.x * T + 12, b.y * T + 6, 2, 2, ocupado ? '#ff5a4f' : '#4fd16a');
+  }
 }
 
 // nuvem cinza com chuva e raios (erro); acompanha o agente
@@ -939,6 +1159,9 @@ function moverOverlay() {
   for (const [id, n] of nodes) {
     const e = state.ents.get(id);
     if (!e) continue;
+    // dentro do banheiro: some a placa também
+    const oculto = !!e.oculto;
+    if (n.oculto !== oculto) { n.oculto = oculto; for (const x of [n.plate, n.bubble, n.hit]) x.style.visibility = oculto ? 'hidden' : ''; }
     const sentado = e.mode === 'seated';
     const cx = sentado ? e.desk.x * T + 16 : Math.round(e.x);
     const pe = sentado ? e.desk.y * T + 29 : Math.round(e.y) + 2;
@@ -1001,6 +1224,7 @@ async function fillPanel(agent, carregar) {
   $('#p-status').dataset.status = st;
   $('#p-task').textContent = a && a.task ? a.task : '';
   $('#p-updated').textContent = a ? `${L.updated} ${L.ago((Date.now() - state.clockSkew - a.updatedAt) / 1000)}` : '';
+  mostrarVontades(agent);
   if (!carregar) return;
   const ul = $('#p-history'); ul.innerHTML = '';
   try {
@@ -1015,6 +1239,24 @@ async function fillPanel(agent, carregar) {
     }
   } catch { ul.append(el('li', 'empty', '—')); }
 }
+// barras de vontade no painel do agente (atualizam sozinhas enquanto o painel está aberto)
+function mostrarVontades(agent) {
+  const box = $('#p-needs');
+  const e = state.ents && state.ents.get(agent.id);
+  if (!e || !e.vont) { box.hidden = true; return; }
+  box.hidden = false;
+  const a = e.atv;
+  const agora = naMesa(e.agent) ? L.doing.fixo : e.mode === 'seated' ? L.doing.mesa : a ? (e.indo ? L.doing.indo + ': ' : '') + L.doing[FAZENDO[a.tipo]] : L.doing.livre;
+  const linhas = [el('div', 'n-now', `${L.now}: ${agora}`)];
+  for (const k of ['sede', 'banheiro', 'social', 'diversao', 'cansaco']) {
+    const v = Math.round(e.vont[k]);
+    const bar = el('div', 'n-bar'); const i = el('i'); i.style.width = v + '%'; if (v > (k === 'cansaco' ? 70 : VONTADE)) i.className = 'alto'; bar.append(i);
+    bar.title = v + '%';
+    linhas.push(el('span', '', L.needs[k]), bar);
+  }
+  box.replaceChildren(...linhas);
+}
+setInterval(() => { if (state.selected && !$('#panel').hidden) mostrarVontades(state.selected); }, 1000);
 $('#p-close').addEventListener('click', () => { $('#panel').hidden = true; state.selected = null; });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#p-close').click(); });
 

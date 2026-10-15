@@ -69,6 +69,11 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .p-status[data-status="offline"], .h-status[data-status="offline"] { color: var(--offline); }
 .p-task { background: #12151b; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 1em; }
 .p-task:empty { display: none; }
+.needs { margin: 10px 0 6px; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; font-size: 12px; }
+.needs .n-now { grid-column: 1 / -1; color: var(--muted); margin-bottom: 2px; }
+.needs .n-bar { height: 6px; border-radius: 3px; background: #12151b; border: 1px solid var(--line); overflow: hidden; }
+.needs .n-bar i { display: block; height: 100%; background: var(--idle); transition: width .6s; }
+.needs .n-bar i.alto { background: var(--waiting); }
 .history { list-style: none; padding: 0; margin: 16px 0 0; border-top: 1px solid var(--line); }
 .history li { display: grid; grid-template-columns: 92px 84px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
 .history li.empty { display: block; color: var(--muted); }

@@ -151,9 +151,11 @@ export const FURNITURE = {
   mesa_reuniao: { w: 48, h: 32, draw: (g, x, y) => { R(g, '#8a5a36', x + 2, y + 6, 44, 18); R(g, '#a5703f', x + 2, y + 6, 44, 2); R(g, '#6e472b', x + 2, y + 24, 44, 3); for (const cx of [8, 20, 32]) { R(g, '#3a3f4b', x + cx, y, 8, 5); R(g, '#3a3f4b', x + cx, y + 28, 8, 4); } } },
   impressora: { w: 16, h: 16, draw: (g, x, y) => { R(g, '#d6d9dd', x + 1, y + 5, 14, 8); R(g, '#f7f7f7', x + 4, y + 2, 8, 4); R(g, '#9aa3ad', x + 1, y + 11, 14, 2); R(g, '#3fae5a', x + 12, y + 7, 1, 1); } },
   tapete: { w: 48, h: 32, draw: (g, x, y) => { R(g, '#b2564b', x, y, 48, 32); R(g, '#c96a5e', x + 3, y + 3, 42, 26); R(g, '#d98f6f', x + 8, y + 8, 32, 16); } },
+  // porta do banheiro: placa com os bonequinhos; a luz de livre/ocupado é pintada por cima, ao vivo
+  banheiro: { w: 16, h: 32, draw: (g, x, y) => { R(g, '#5b3b24', x + 1, y + 2, 14, 30); R(g, '#8a5a36', x + 2, y + 3, 12, 29); R(g, '#a5703f', x + 2, y + 3, 12, 1); R(g, '#7a4e2e', x + 4, y + 13, 8, 7); R(g, '#7a4e2e', x + 4, y + 23, 8, 7); R(g, '#e8eef5', x + 3, y + 5, 8, 6); R(g, '#4a7fd4', x + 4, y + 6, 1, 1); R(g, '#4a7fd4', x + 4, y + 7, 2, 3); R(g, '#d9534f', x + 8, y + 6, 1, 1); R(g, '#d9534f', x + 7, y + 7, 3, 3); R(g, '#9aa3ad', x + 6, y + 6, 1, 4); R(g, '#f2c14e', x + 12, y + 19, 1, 2); } },
   cafe: { w: 16, h: 24, draw: (g, x, y) => { R(g, '#3a3f4b', x + 2, y + 2, 12, 20); R(g, '#5a6069', x + 3, y + 3, 10, 6); R(g, '#e6e6e6', x + 6, y + 13, 4, 4); R(g, '#d9534f', x + 11, y + 4, 1, 1); } },
 };
-const FURN_ALIAS = { bookshelf: 'estante', plant: 'planta', clock: 'relogio', window: 'janela', kanban: 'quadro', board: 'quadro', chart: 'grafico', water: 'bebedouro', cooler: 'bebedouro', cabinet: 'arquivo', couch: 'sofa', meeting_table: 'mesa_reuniao', printer: 'impressora', rug: 'tapete', coffee: 'cafe', relógio: 'relogio', gráfico: 'grafico', café: 'cafe', desk: 'mesa' };
+const FURN_ALIAS = { bookshelf: 'estante', plant: 'planta', clock: 'relogio', window: 'janela', kanban: 'quadro', board: 'quadro', chart: 'grafico', water: 'bebedouro', cooler: 'bebedouro', cabinet: 'arquivo', couch: 'sofa', meeting_table: 'mesa_reuniao', printer: 'impressora', rug: 'tapete', coffee: 'cafe', wc: 'banheiro', bathroom: 'banheiro', toilet: 'banheiro', restroom: 'banheiro', relógio: 'relogio', gráfico: 'grafico', café: 'cafe', desk: 'mesa' };
 export const furniture = (type) => FURNITURE[type] || FURNITURE[FURN_ALIAS[type]] || null;
 
 // ---------- monitor ----------

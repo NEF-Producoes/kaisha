@@ -25,6 +25,7 @@ moveis:
   - { tipo: cafe,      pos: [1, 9] }
   - { tipo: bebedouro, pos: [3, 9] }
   - { tipo: sofa,      pos: [6, 12] }
+  - { tipo: banheiro,  pos: [8, 9] }
   - { tipo: planta,    pos: [10, 9] }
   - { tipo: mesa_reuniao, pos: [16, 10] }
   - { tipo: planta,       pos: [22, 12] }
