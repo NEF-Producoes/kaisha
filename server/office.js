@@ -17,7 +17,7 @@ const ALIAS = {
   de: 'from', ate: 'to', até: 'to', enfeites: 'decorations', ponto: 'at', efeito: 'effect', desenhos: 'sprites',
   paleta: 'palette', pixels: 'pixels', cabelo: 'hair', pele: 'skin', roupa: 'shirt', idioma: 'lang', titulo: 'title', título: 'title',
   movel: 'movable', ordem: 'order', fica_na_sala: 'stay', fica_na_mesa: 'fixed', na_mesa: 'fixed', penteado: 'hairstyle', cabelo_estilo: 'hairstyle', na_sala: 'stay', stay_in_room: 'stay', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
-  expediente: 'hours', horario: 'hours', horário: 'hours', almoco: 'lunch', almoço: 'lunch', relogio: 'clock', relógio: 'clock', formato: 'aspect', proporcao: 'aspect', proporção: 'aspect', monitores: 'monitors', alas: 'wings', ala: 'wing', comum: 'common',
+  expediente: 'hours', horario: 'hours', horário: 'hours', almoco: 'lunch', almoço: 'lunch', relogio: 'clock', relógio: 'clock', formato: 'aspect', proporcao: 'aspect', proporção: 'aspect', monitores: 'monitors', alas: 'wings', ala: 'wing', comum: 'common', passagens: 'passages', entradas: 'entrances', lado: 'side',
 };
 const norm = (v) => {
   if (Array.isArray(v)) return v.map(norm);
@@ -52,6 +52,15 @@ export function validateOffice(raw) {
   rooms.forEach((r) => {
     if (r.wing != null && r.wing !== '' && !wingIds.has(String(r.wing))) erros.push(`sala "${r.id}": ala "${r.wing}" não existe (declare em alas)`);
     if (r.wing && (r.common === true || r.common === 'sim')) erros.push(`sala "${r.id}": use ala ou comum, não os dois`);
+  });
+  // passagens: pares de salas ligadas (sem a lista, toda divisa tem passagem); entradas: portas para fora
+  const passages = Array.isArray(o.passages) ? o.passages.filter((p) => Array.isArray(p) && p.length === 2).map((p) => p.map(String)) : null;
+  (passages || []).forEach(([a, b]) => { for (const x of [a, b]) if (!roomIds.has(x)) erros.push(`passagem ${a} ↔ ${b}: sala "${x}" não existe`); });
+  const LADOS = { esquerda: 'left', left: 'left', direita: 'right', right: 'right', baixo: 'bottom', bottom: 'bottom', sul: 'bottom', cima: 'top', top: 'top', norte: 'top' };
+  const entrances = (Array.isArray(o.entrances) ? o.entrances : []).filter((e) => e && typeof e === 'object');
+  entrances.forEach((e, i) => {
+    if (!roomIds.has(String(e.room ?? ''))) erros.push(`entrada #${i + 1}: sala "${e.room ?? ''}" não existe`);
+    if (!LADOS[String(e.side ?? '').toLowerCase()]) erros.push(`entrada #${i + 1}: lado deve ser esquerda, direita, baixo ou cima`);
   });
   const agents = Array.isArray(o.agents) ? o.agents : [];
   const agentIds = new Set();
@@ -102,6 +111,8 @@ export function validateOffice(raw) {
         hairstyle: ({ longo: 'long', long: 'long', comprido: 'long', curto: 'short', short: 'short' })[String(a.hairstyle || '').toLowerCase()] || null,
       })),
       furniture: furniture.map((f) => ({ type: String(f.type), pos: f.pos, room: f.room ? String(f.room) : null, flip: !!f.flip })),
+      passages,
+      entrances: entrances.filter((e) => roomIds.has(String(e.room ?? '')) && LADOS[String(e.side ?? '').toLowerCase()]).map((e) => ({ room: String(e.room), side: LADOS[String(e.side).toLowerCase()] })),
       // vida pelo relógio: expediente (fora dele todo mundo vai para casa e a luz apaga), almoço e happy hour
       hours: o.hours != null && o.hours !== '' ? String(o.hours) : null,
       lunch: o.lunch != null && o.lunch !== '' ? String(o.lunch) : null,
@@ -292,11 +303,13 @@ export function toYaml(o) {
     salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null, ala: r.wing || null, comum: r.common || null })),
     agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null, fica_na_sala: a.stay || null, fica_na_mesa: a.fixed || null, penteado: a.hairstyle === 'long' ? 'longo' : a.hairstyle === 'short' ? 'curto' : null, monitores: a.monitors || null })),
     moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
+    passagens: o.passages && o.passages.length ? o.passages : null,
+    entradas: o.entrances && o.entrances.length ? o.entrances.map((e) => ({ sala: e.room, lado: { left: 'esquerda', right: 'direita', bottom: 'baixo', top: 'cima' }[e.side] })) : null,
     expediente: o.hours, almoco: o.lunch, happy_hour: o.happy_hour, relogio: o.clock === false ? 'não' : null, formato: o.aspect || null,
     datas_especiais: o.special_days && o.special_days.length ? o.special_days.map((d) => limpa({ data: d.date, nome: d.name, tema: d.theme, mensagem: d.message })) : null,
   });
   const doc = new YAML.Document(dados);
-  for (const k of ['alas', 'salas', 'agentes', 'moveis', 'datas_especiais']) {
+  for (const k of ['alas', 'salas', 'agentes', 'moveis', 'passagens', 'entradas', 'datas_especiais']) {
     const seq = doc.get(k, true);
     if (seq && seq.items) for (const it of seq.items) it.flow = true;
   }

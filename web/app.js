@@ -182,7 +182,10 @@ function buildNav() {
         (segs.get(k) || segs.set(k, []).get(k)).push({ x, y: y + 1, v: false, a: y * W + x, b: (y + 1) * W + x });
       }
     }
+    // com a lista de passagens do YAML, só os pares listados ganham abertura; o resto vira parede
+    const permit = state.snap.office.passages ? new Set(state.snap.office.passages.flatMap(([a, b]) => [a + '|' + b, b + '|' + a])) : null;
     for (const list of segs.values()) {
+      if (permit) { const ra = rooms[floor[list[0].a]], rb = rooms[floor[list[0].b]]; if (!permit.has(ra.id + '|' + rb.id)) { list.forEach((e) => edges.push({ ...e, door: false })); continue; } }
       // abertura no trecho do meio em que os dois lados estão livres
       const livres = list.map((e, i) => (walk[e.a] && walk[e.b] ? i : -1)).filter((i) => i >= 0);
       const meio = list.length / 2;
@@ -209,7 +212,25 @@ function buildNav() {
     const n = y * 1000 - Math.abs(x - W / 2);
     if (n > nota) { nota = n; saida = i; }
   }
-  state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, saida, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x),
+  // entradas do YAML: uma porta para fora em cada fachada indicada; agentes e visitas usam a da sua ala
+  const entradas = [];
+  for (const en of state.snap.office.entrances || []) {
+    const ri = rooms.findIndex((r) => r.id === en.room);
+    if (ri < 0) continue;
+    const r = rooms[ri], fora = (x, y) => x < 0 || y < 0 || x >= W || y >= H || floor[y * W + x] < 0 && !wallRow[y * W + x];
+    const cand = [];
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
+      const i = y * W + x;
+      if (floor[i] !== ri || !walk[i]) continue;
+      const ok = en.side === 'left' ? x === r.x && fora(x - 1, y) : en.side === 'right' ? x === r.x + r.w - 1 && fora(x + 1, y) : en.side === 'bottom' ? y === r.y + r.h - 1 && fora(x, y + 1) : fora(x, y - 1) && !wallRow[(y - 1) * W + x];
+      if (ok) cand.push(i);
+    }
+    if (!cand.length) continue;
+    const mx = r.x + r.w / 2, my = r.y + r.h / 2;
+    cand.sort((a, b) => Math.hypot((a % W) - mx, ((a / W) | 0) - my) - Math.hypot((b % W) - mx, ((b / W) | 0) - my));
+    entradas.push({ tile: cand[0], side: en.side, room: r.id, wing: r.common ? null : r.wing || null, comum: !!r.common, comp: comp[cand[0]] });
+  }
+  state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, saida, entradas, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x),
     cafes: cafes.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x), lugares };
   state.jogos = new Map();
   state.slots = new Map(); // lugar reservado -> agente (um por cadeira de sofá, ponto do bebedouro, banheiro…)
@@ -301,6 +322,16 @@ function buildStatic() {
       s.fillStyle = '#5b4a39';
       if (e.v) { s.fillRect(e.x * T - 2, e.y * T - 6, 4, 2); } else { s.fillRect(e.x * T, e.y * T - 2, 2, 3); s.fillRect((e.x + 1) * T - 2, e.y * T - 2, 2, 3); }
     }
+  }
+  // portas das entradas: soleira de madeira na fachada e um capacho do lado de dentro
+  for (const en of nav.entradas || []) {
+    const x = (en.tile % W) * T, y = ((en.tile / W) | 0) * T;
+    const sol = (a, b, w, h) => { s.fillStyle = '#5c3438'; s.fillRect(a, b, w, h); s.fillStyle = '#a96a4c'; s.fillRect(a + (w > h ? 0 : 1), b + (w > h ? 1 : 0), w > h ? w : 1, w > h ? 1 : h); };
+    if (en.side === 'left') sol(x, y, 3, T); else if (en.side === 'right') sol(x + T - 3, y, 3, T); else if (en.side === 'bottom') sol(x, y + T - 3, T, 3); else sol(x, y, T, 3);
+    const mx = en.side === 'left' ? x + 4 : en.side === 'right' ? x + 2 : x + 2, my = en.side === 'bottom' ? y + 5 : en.side === 'top' ? y + 4 : y + 3;
+    const hor = en.side === 'bottom' || en.side === 'top';
+    s.fillStyle = '#6b4a3a'; s.fillRect(mx, my, hor ? 12 : 10, hor ? 7 : 10);
+    s.fillStyle = '#8a6450'; s.fillRect(mx + 1, my + 1, hor ? 10 : 8, hor ? 5 : 8);
   }
   // móveis (tapetes primeiro; os de parede ficam na faixa da parede; os de chão por ordem de altura)
   const items = (state.snap.office.furniture || []).map((f) => ({ f, key: furnitureKey(f.type), def: furniture(f.type) })).filter((x) => x.def);
@@ -767,11 +798,21 @@ function escuridao() {
   const k = antes > 0 ? 1 - Math.min(1, Math.max(0, (30 - antes) / 30)) : depois >= 0 ? Math.min(1, depois / 30) : 0;
   return k * MAX;
 }
+// porta por onde o agente chega e vai embora: a entrada da ala dele (ou de uma sala comum), alcançável da mesa;
+// sem entradas no YAML, a saída de sempre (borda de baixo do prédio)
+function saidaDe(e) {
+  const nav = state.nav, lista = nav.entradas || [];
+  if (!lista.length) return nav.saida;
+  const ala = state.alaDe && state.alaDe.get(e.agent.id), alvo = e.seat && e.seat.entrada >= 0 ? nav.comp[e.seat.entrada] : null;
+  const ok = (x) => alvo == null || x.comp === alvo;
+  const m = lista.find((x) => ala && x.wing === ala && ok(x)) || lista.find((x) => x.comum && ok(x)) || lista.find(ok);
+  return m ? m.tile : nav.saida;
+}
 function irEmbora(e, motivo = 'casa', volta = 0) {
   if (e.atv) terminar(e);
   e.fora = motivo; e.voltaEm = volta;
   if (e.mode === 'seated' && !naMesa(e.agent)) levantar(e);
-  const sai = state.nav.saida;
+  const sai = saidaDe(e);
   const p = !naMesa(e.agent) && sai >= 0 && e.mode !== 'seated' ? caminho(blocoDe(e.x, e.y), sai) : null;
   if (p && p.length) { e.path = p; e.mode = 'walk'; e.poi = false; e.indo = true; e.atv = { tipo: 'embora' }; }
   else { e.mode = 'sumindo'; e.path = []; }
@@ -779,7 +820,7 @@ function irEmbora(e, motivo = 'casa', volta = 0) {
 // voltou do almoço ou chegou de manhã: entra pela saída e vai para a mesa
 function chegar(e) {
   e.fora = null; e.voltaEm = 0; e.alfa = 0;
-  const sai = state.nav.saida;
+  const sai = saidaDe(e);
   const p = !naMesa(e.agent) && sai >= 0 && e.seat.entrada >= 0 ? caminho(sai, e.seat.entrada) : null;
   if (p && p.length) { Object.assign(e, centroBloco(sai)); e.path = p; e.mode = 'voltar'; }
   else sentar(e);
@@ -1070,6 +1111,10 @@ function lugaresDeVisita() {
   const meio = r.x + r.w / 2;
   tiles.sort((a, b) => ((b / W) | 0) - ((a / W) | 0) || Math.abs((a % W) - meio) - Math.abs((b % W) - meio));
   out.entrada = tiles[0];
+  // com entradas no YAML, a visita entra pela porta da própria sala de espera ou da ala dela
+  const ents = state.nav.entradas || [];
+  const porta = ents.find((x) => x.room === r.id) || ents.find((x) => r.wing && x.wing === r.wing && comp[x.tile] === comp[out.entrada]);
+  if (porta) out.entrada = porta.tile;
   const regiao = comp[out.entrada];
   // assentos: cada bloco dos sofás da sala de espera, com o bloco da frente livre para chegar
   for (const f of state.snap.office.furniture || []) {
@@ -1618,7 +1663,7 @@ function resize() {
   } else v = calcularVista(W, H, state.formato);
   state.view = v;
   const chave = `${v.VW}x${v.VH}:${v.OX},${v.OY}`;
-  if (v.fora && chave !== state.terrenoChave) { state.terreno = desenharTerreno(v, bw, bh, hashStr(state.snap.office.name || 'k'), state.ocupado); state.terrenoChave = chave; }
+  if (v.fora && chave !== state.terrenoChave) { state.terreno = desenharTerreno(v, bw, bh, hashStr(state.snap.office.name || 'k'), state.ocupado, (state.nav.entradas || []).map((en) => ({ x: en.tile % W, y: (en.tile / W) | 0, side: en.side }))); state.terrenoChave = chave; }
   if (!v.fora) state.terreno = null;
   state.off = { x: Math.round(v.OX * s), y: Math.round(v.OY * s) };
   canvas.width = Math.round(v.VW * s); canvas.height = Math.round(v.VH * s);

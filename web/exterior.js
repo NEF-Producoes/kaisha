@@ -59,7 +59,7 @@ function poste(g, x, y) {
 
 // desenha o terreno inteiro (VW × VH) com o prédio em (OX, OY); ocupado(tx, ty) diz se o bloco é de alguma sala,
 // para a calçada e a grama seguirem o contorno real da planta (em L, em T…)
-export function desenharTerreno(v, bw, bh, semente = 1, ocupado = () => true) {
+export function desenharTerreno(v, bw, bh, semente = 1, ocupado = () => true, portas = []) {
   const { VW, VH, OX, OY } = v;
   const c = document.createElement('canvas'); c.width = VW; c.height = VH;
   const g = c.getContext('2d');
@@ -104,6 +104,22 @@ export function desenharTerreno(v, bw, bh, semente = 1, ocupado = () => true) {
     if (grama(x + 1, y) || grama(x, y + 1)) c = CDK;
     buf[y * VW + x] = c;
   }
+  // caminho de calçada saindo de cada porta até a borda da tela (as árvores desviam dele)
+  const caminho = new Uint8Array(VW * VH);
+  for (const pt of portas) {
+    const px0 = OX + pt.x * T, py0 = OY + pt.y * T;
+    let x0, x1, y0, y1;
+    if (pt.side === 'left') { x0 = 0; x1 = px0; y0 = py0 + 2; y1 = py0 + T - 2; }
+    else if (pt.side === 'right') { x0 = px0 + T; x1 = VW; y0 = py0 + 2; y1 = py0 + T - 2; }
+    else if (pt.side === 'bottom') { x0 = px0 + 2; x1 = px0 + T - 2; y0 = py0 + T; y1 = VH; }
+    else { x0 = px0 + 2; x1 = px0 + T - 2; y0 = 0; y1 = py0; }
+    for (let y = Math.max(0, y0); y < Math.min(VH, y1); y++) for (let x = Math.max(0, x0); x < Math.min(VW, x1); x++) {
+      if (dentro[y * VW + x]) continue;
+      caminho[y * VW + x] = 1;
+      const borda = x === x0 || x === x1 - 1 || y === y0 || y === y1 - 1;
+      buf[y * VW + x] = borda ? CDK : (((x - x0) >> 3) + ((y - y0) >> 3)) % 2 ? C0 : CHI;
+    }
+  }
   // sombra do prédio no chão (luz de cima à esquerda): mistura 35% com roxo escuro
   for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
     if (ehPredio(x, y) || !(ehPredio(x - 4, y - 4) || ehPredio(x - 2, y - 2))) continue;
@@ -117,7 +133,8 @@ export function desenharTerreno(v, bw, bh, semente = 1, ocupado = () => true) {
     .filter(([x, y]) => x > 4 && x < VW - 4 && y > 26 && y < VH - 2);
   // árvores, arbustos e flores fora da calçada (inclusive nos cantos vazios da planta), sem encostar umas nas outras
   const zonas = { 14: dilata(dentro, cal + 14), 8: dilata(dentro, cal + 8), 2: dilata(dentro, cal + 2) };
-  const livre = (x, y, m) => x > 6 && x < VW - 6 && y > 4 && y < VH - 2 && !zonas[m][y * VW + x];
+  const perto = portas.length ? dilata(caminho, 12) : null;
+  const livre = (x, y, m) => x > 6 && x < VW - 6 && y > 4 && y < VH - 2 && !zonas[m][y * VW + x] && !(perto && perto[y * VW + x]);
   let areaLivre = 0; for (let i = 0; i < VW * VH; i++) if (!zonas[14][i]) areaLivre++;
   const coisas = [];
   const longe = (x, y, d) => coisas.every(([a, b]) => Math.hypot(a - x, b - y) > d) && postes.every(([a, b]) => Math.hypot(a - x, b - y) > 14);
