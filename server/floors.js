@@ -57,6 +57,8 @@ export function createFloors({ dataDir, tz, log, mainId, onChange, onList }) {
   function seed(ids, db) {
     for (const id of ids) {
       if (!FLOOR_ID.test(id) || id === mainId || fs.existsSync(path.join(dir, `${id}.yaml`))) continue;
+      // virou ala de outro andar (andar único): não recria o andar antigo nem tira agentes de lá
+      if (resolve(id)) { log.info?.(`KAISHA_ANDARES: "${id}" agora é ala de "${resolve(id).floor}"; andar não recriado`); continue; }
       const exemplo = path.join(EXEMPLOS, `${id}.yaml`);
       if (fs.existsSync(exemplo)) fs.copyFileSync(exemplo, path.join(dir, `${id}.yaml`));
       else fs.writeFileSync(path.join(dir, `${id}.yaml`), toYaml(validateOffice({ name: id, plan: 'open', rooms: [{ id: 'salao', name: 'Salão', area: [0, 0, 16, 10] }] }).office));
@@ -78,6 +80,27 @@ export function createFloors({ dataDir, tz, log, mainId, onChange, onList }) {
     }
   }
 
+  // um nome de andar pode ser um andar de verdade, ou uma ala (id ou apelido) de algum andar:
+  // depois de juntar os andares, "andar": "nef" continua funcionando e cai na ala NEF do andar único
+  function resolve(nome) {
+    const n = String(nome || '').trim().toLowerCase();
+    if (!n) return null;
+    if (floors.has(n)) return { floor: n, wing: null };
+    for (const f of list()) {
+      const w = (floors.get(f.id).snapshot().office.wings || []).find((x) => x.id.toLowerCase() === n || (x.aliases || []).includes(n));
+      if (w) return { floor: f.id, wing: w.id };
+    }
+    return null;
+  }
+  // ala de um agente: a da sala onde fica a mesa dele (ou da sala declarada); sala comum = sem ala
+  function wingOfAgent(floorId, agentId) {
+    const st = floors.get(floorId); if (!st) return null;
+    const o = st.snapshot().office, a = o.agents.find((x) => x.id === agentId);
+    if (!a) return null;
+    const dentro = (r, x, y) => x >= r.area[0] && x < r.area[0] + r.area[2] && y >= r.area[1] && y < r.area[1] + r.area[3];
+    const r = (a.desk && o.rooms.find((q) => dentro(q, a.desk[0], a.desk[1]))) || o.rooms.find((q) => q.id === a.room);
+    return r && !r.common ? r.wing || null : null;
+  }
   // em qual andar um agente está declarado (o principal tem preferência)
   function floorOfAgent(agentId) {
     for (const f of list()) if (floors.get(f.id).snapshot().office.agents.some((a) => a.id === agentId)) return f.id;
@@ -86,6 +109,6 @@ export function createFloors({ dataDir, tz, log, mainId, onChange, onList }) {
 
   scan();
   setInterval(scan, 3000).unref();
-  return { get: (id) => floors.get(id), has: (id) => floors.has(id), list, create, seed, floorOfAgent, ids: () => [...floors.keys()], mainId };
+  return { get: (id) => floors.get(id), has: (id) => floors.has(id), list, create, seed, floorOfAgent, resolve, wingOfAgent, ids: () => [...floors.keys()], mainId };
 }
 

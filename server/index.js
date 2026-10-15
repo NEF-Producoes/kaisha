@@ -63,6 +63,12 @@ const floors = createFloors({
 floors.seed(config.seedFloors, db);
 // agente com estado num andar onde não está declarado, mas declarado em outro: o estado e o histórico vão para lá
 function arrumarAgentes() {
+  // andar aposentado que virou ala (ex.: nef, consultorio depois do andar único): tudo vai para o andar da ala
+  for (const f of db.floorsWithData()) {
+    if (floors.has(f)) continue;
+    const r = floors.resolve(f);
+    if (r) { const n = db.mergeFloor(f, r.floor); log.info(`andar "${f}" agora é a ala "${r.wing}" de "${r.floor}": ${n} agente(s), histórico e visitas levados para lá`); }
+  }
   for (const f of floors.ids()) {
     const declarados = new Set(floors.get(f).snapshot().office.agents.map((a) => a.id));
     for (const id of db.ids(f)) {
@@ -73,7 +79,15 @@ function arrumarAgentes() {
   }
 }
 arrumarAgentes();
-const floorDaChave = (env) => floors.ids().find((f) => f.toUpperCase().replace(/-/g, '_') === env.toUpperCase());
+// KAISHA_API_KEY_<ANDAR>: o andar com esse nome, ou a ala (id ou apelido) que herdou o nome depois de juntar os andares
+const floorDaChave = (env) => {
+  const f = floors.ids().find((x) => x.toUpperCase().replace(/-/g, '_') === env.toUpperCase());
+  if (f) return { floor: f, wing: null };
+  return floors.resolve(env.toLowerCase()) || floors.resolve(env.toLowerCase().replace(/_/g, '-'));
+};
+// nome pedido (andar, ala ou apelido) -> andar de verdade
+const andarReal = (n) => { if (!n) return null; const r = floors.resolve(n); return r ? r.floor : n; };
+const alaPedida = (n) => { const r = n && floors.resolve(n); return r ? r.wing : null; };
 
 // ---------- utilidades ----------
 const safeEq = (a, b) => {
@@ -101,10 +115,11 @@ function quemEscreve(req) {
   const k = req.headers[config.apiKeyHeader] || '';
   if (!k) return null;
   if (config.apiKey && safeEq(k, config.apiKey)) return { master: true, floor: null };
-  for (const fk of config.floorKeys) if (safeEq(k, fk.key)) { const floor = floorDaChave(fk.env); if (floor) return { master: false, floor }; }
+  for (const fk of config.floorKeys) if (safeEq(k, fk.key)) { const r = floorDaChave(fk.env); if (r) return { master: false, floor: r.floor, wing: r.wing }; }
   return null;
 }
-const canWrite = (req, floor) => { const q = quemEscreve(req); return !!q && (q.master || (floor != null && q.floor === floor)); };
+// a chave de uma ala escreve status, visitas e reações da ala, mas não muda a planta do andar inteiro
+const canWrite = (req, floor) => { const q = quemEscreve(req); return !!q && (q.master || (floor != null && q.floor === floor && !q.wing)); };
 // quem vê o painel: livre, ou senha (Basic) se VIEW_PASSWORD estiver definida; a apikey também abre
 const canView = (req) => {
   if (!config.viewPassword) return true;
@@ -198,7 +213,8 @@ const server = http.createServer(async (req, res) => {
   try {
     if (p === '/healthz') return json(res, 200, { ok: true, version: VERSION });
 
-    const andarPedido = (url.searchParams.get('andar') || url.searchParams.get('floor') || '').trim().toLowerCase() || null;
+    const nomePedido = (url.searchParams.get('andar') || url.searchParams.get('floor') || '').trim().toLowerCase() || null;
+    const andarPedido = andarReal(nomePedido);
     const semAndar = (res2, f) => json(res2, 404, { erro: `andar "${f}" não existe`, andares: floors.list().map((x) => x.id) });
     const negado = () => json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido para este andar` });
 
@@ -215,15 +231,16 @@ const server = http.createServer(async (req, res) => {
       }
       const body = await readBody(req);
       // em qual andar: o pedido diz; senão o andar da chave; senão onde o agente está declarado; senão o principal
-      const andarDe = (pedido, agente) => pedido || andarPedido || quem.floor || floors.floorOfAgent(agente) || MAIN;
-      const pode = (f) => quem.master || f === quem.floor;
+      const andarDe = (pedido, agente) => andarReal(pedido) || andarPedido || quem.floor || floors.floorOfAgent(agente) || MAIN;
+      // chave de ala: só os agentes daquela ala
+      const pode = (f, agente) => quem.master || (f === quem.floor && (!quem.wing || floors.wingOfAgent(f, agente) === quem.wing));
       if (p === '/api/heartbeat') {
         const ids = Array.isArray(body.agents) ? body.agents : [body.agent ?? body.agente];
         const pedido = String(body.floor ?? body.andar ?? '').trim().toLowerCase() || null;
         const out = [];
         for (const id of ids.map((x) => String(x || '').trim()).filter(Boolean)) {
           const f = andarDe(pedido, id);
-          if (!floors.has(f) || !pode(f)) continue;
+          if (!floors.has(f) || !pode(f, id)) continue;
           const a = db.heartbeat(f, id); if (a) { out.push(a); queueAgent(a); }
         }
         return json(res, 200, { ok: true, agents: out.length });
@@ -236,7 +253,7 @@ const server = http.createServer(async (req, res) => {
         if (erro) { erros.push({ index: i, erro }); return; }
         const f = andarDe(ev.floor, ev.agent);
         if (!floors.has(f)) { erros.push({ index: i, erro: `andar "${f}" não existe` }); return; }
-        if (!pode(f)) { erros.push({ index: i, erro: `esta chave não escreve no andar "${f}"` }); return; }
+        if (!pode(f, ev.agent)) { erros.push({ index: i, erro: `esta chave não escreve no agente "${ev.agent}" (andar "${f}")` }); return; }
         const a = db.record(f, ev);
         ok.push(a); queueAgent(a, !!ev.outcome);
       });
@@ -247,9 +264,10 @@ const server = http.createServer(async (req, res) => {
       const quem = quemEscreve(req);
       if (!quem) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
       const body = await readBody(req);
-      const f = String(body.floor ?? body.andar ?? '').trim().toLowerCase() || andarPedido || quem.floor || MAIN;
+      const nome = String(body.floor ?? body.andar ?? '').trim().toLowerCase() || nomePedido;
+      const f = andarReal(nome) || quem.floor || MAIN;
       if (!floors.has(f)) return semAndar(res, f);
-      if (!quem.master && quem.floor !== f) return negado();
+      if (!quem.master && (quem.floor !== f || (quem.wing && alaPedida(nome) && alaPedida(nome) !== quem.wing))) return negado();
       const r = parseVisitas(body);
       if (r.erro) return json(res, 400, { erro: r.erro });
       const sumiram = db.setVisits(f, r.dia, r.lista);
@@ -273,9 +291,9 @@ const server = http.createServer(async (req, res) => {
       const tipo = TIPOS[String(body.reaction ?? body.reacao ?? body.reação ?? body.tipo ?? '').trim().toLowerCase()];
       if (!tipo) return json(res, 400, { erro: 'reacao: use festa, preocupado ou alivio' });
       const agente = String(body.agent ?? body.agente ?? '').trim().slice(0, 64) || null;
-      const f = String(body.floor ?? body.andar ?? '').trim().toLowerCase() || andarPedido || quem.floor || (agente && floors.floorOfAgent(agente)) || MAIN;
+      const f = andarReal(String(body.floor ?? body.andar ?? '').trim().toLowerCase()) || andarPedido || quem.floor || (agente && floors.floorOfAgent(agente)) || MAIN;
       if (!floors.has(f)) return semAndar(res, f);
-      if (!quem.master && quem.floor !== f) return negado();
+      if (!quem.master && (quem.floor !== f || (quem.wing && agente && floors.wingOfAgent(f, agente) !== quem.wing))) return negado();
       broadcast(f, 'reaction', { tipo, agent: agente, texto: clip(body.text ?? body.texto, 80), em: Date.now() });
       return json(res, 200, { ok: true, andar: f, reacao: tipo });
     }
@@ -283,7 +301,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/auth' && req.method === 'GET') {
       const quem = quemEscreve(req);
       const f = andarPedido || MAIN;
-      return quem && (quem.master || quem.floor === f) ? json(res, 200, { ok: true, master: quem.master }) : json(res, 401, { erro: 'chave inválida' });
+      return quem && (quem.master || (quem.floor === f && !quem.wing)) ? json(res, 200, { ok: true, master: quem.master }) : json(res, 401, { erro: 'chave inválida' });
     }
     if (p === '/api/office' && req.method === 'PUT') {
       const f = andarPedido || MAIN;
@@ -315,7 +333,7 @@ const server = http.createServer(async (req, res) => {
     const andar = andarPedido || MAIN;
     if (p === '/api/floors') return json(res, 200, { main: MAIN, floors: floors.list() });
     if (p.startsWith('/api/') && !floors.has(andar)) return semAndar(res, andar);
-    if (p === '/api/state') return json(res, 200, { floor: andar, floors: floors.list(), agents: db.state(andar), visits: visitasHoje(andar), score: placarHoje(andar), ...floors.get(andar).snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
+    if (p === '/api/state') return json(res, 200, { floor: andar, focus: alaPedida(nomePedido), floors: floors.list(), agents: db.state(andar), visits: visitasHoje(andar), score: placarHoje(andar), ...floors.get(andar).snapshot(), offlineAfterMs: config.offlineAfterMs, lang: config.lang, serverTime: Date.now() });
     if (p === '/api/office') return json(res, 200, floors.get(andar).snapshot());
     if (p.startsWith('/api/agents/') && p.endsWith('/history')) {
       const id = decodeURIComponent(p.slice('/api/agents/'.length, -'/history'.length));

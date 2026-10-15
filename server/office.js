@@ -17,7 +17,7 @@ const ALIAS = {
   de: 'from', ate: 'to', até: 'to', enfeites: 'decorations', ponto: 'at', efeito: 'effect', desenhos: 'sprites',
   paleta: 'palette', pixels: 'pixels', cabelo: 'hair', pele: 'skin', roupa: 'shirt', idioma: 'lang', titulo: 'title', título: 'title',
   movel: 'movable', ordem: 'order', fica_na_sala: 'stay', fica_na_mesa: 'fixed', na_mesa: 'fixed', penteado: 'hairstyle', cabelo_estilo: 'hairstyle', na_sala: 'stay', stay_in_room: 'stay', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
-  expediente: 'hours', horario: 'hours', horário: 'hours', almoco: 'lunch', almoço: 'lunch', relogio: 'clock', relógio: 'clock', formato: 'aspect', proporcao: 'aspect', proporção: 'aspect', monitores: 'monitors', alas: 'wings', ala: 'wing', comum: 'common', passagens: 'passages', entradas: 'entrances', lado: 'side',
+  expediente: 'hours', horario: 'hours', horário: 'hours', almoco: 'lunch', almoço: 'lunch', relogio: 'clock', relógio: 'clock', formato: 'aspect', proporcao: 'aspect', proporção: 'aspect', monitores: 'monitors', alas: 'wings', ala: 'wing', comum: 'common', passagens: 'passages', entradas: 'entrances', lado: 'side', apelidos: 'aliases',
 };
 const norm = (v) => {
   if (Array.isArray(v)) return v.map(norm);
@@ -89,6 +89,8 @@ export function validateOffice(raw) {
       plan: ['aberta', 'aberto', 'open', 'integrada'].includes(String(o.plan || '').toLowerCase()) ? 'open' : 'rooms',
       wings: wings.map((w) => ({
         id: String(w.id).trim(), name: String(w.name ?? w.id),
+        // apelidos: nomes antigos de andar que agora caem nesta ala (ex.: consultorio), para o n8n continuar igual
+        aliases: (Array.isArray(w.aliases) ? w.aliases : w.aliases ? [w.aliases] : []).map((x) => String(x).trim().toLowerCase()).filter(Boolean),
         // horários próprios da ala (vazios = os do andar)
         hours: w.hours != null && w.hours !== '' ? String(w.hours) : null,
         lunch: w.lunch != null && w.lunch !== '' ? String(w.lunch) : null,
@@ -302,7 +304,7 @@ export function toYaml(o) {
     planta: o.plan === 'open' ? 'aberta' : null,
     calendario: o.calendar && o.calendar !== 'br' ? o.calendar : null,
     idioma: o.lang,
-    alas: o.wings && o.wings.length ? o.wings.map((w) => limpa({ id: w.id, nome: w.name !== w.id ? w.name : null, expediente: w.hours, almoco: w.lunch, happy_hour: w.happy_hour })) : null,
+    alas: o.wings && o.wings.length ? o.wings.map((w) => limpa({ id: w.id, nome: w.name !== w.id ? w.name : null, apelidos: w.aliases && w.aliases.length ? w.aliases : null, expediente: w.hours, almoco: w.lunch, happy_hour: w.happy_hour })) : null,
     salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null, ala: r.wing || null, comum: Array.isArray(r.common) ? r.common : r.common || null })),
     agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null, fica_na_sala: a.stay || null, fica_na_mesa: a.fixed || null, penteado: a.hairstyle === 'long' ? 'longo' : a.hairstyle === 'short' ? 'curto' : null, monitores: a.monitors || null })),
     moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null, ala: f.wing || null })),

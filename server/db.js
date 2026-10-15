@@ -100,6 +100,11 @@ export function openDb(dataDir, { mainFloor = 'principal' } = {}) {
   const ids = db.prepare('SELECT id FROM agents WHERE floor = ?');
   const moveAgent = db.prepare('UPDATE agents SET floor = ? WHERE floor = ? AND id = ?');
   const moveEvents = db.prepare('UPDATE events SET floor = ? WHERE floor = ? AND agent = ?');
+  // juntar andares: andares que ainda têm dados no banco, e mudança de um andar inteiro para outro
+  const andaresComDados = db.prepare('SELECT floor FROM agents UNION SELECT floor FROM events UNION SELECT floor FROM visits');
+  const apagaAgente = db.prepare('DELETE FROM agents WHERE floor = ? AND id = ?');
+  const moveVisitas = db.prepare('UPDATE OR IGNORE visits SET floor = ? WHERE floor = ?');
+  const sobraVisitas = db.prepare('DELETE FROM visits WHERE floor = ?');
 
   // visitas (pacientes, clientes): chegam numa sala de espera e são atendidas por um agente no horário marcado
   const visitasDoDia = db.prepare('SELECT * FROM visits WHERE floor = ? AND dia = ?');
@@ -166,6 +171,20 @@ export function openDb(dataDir, { mainFloor = 'principal' } = {}) {
       moveAgent.run(para, de, agent); moveEvents.run(para, de, agent);
       return true;
     },
+    // um andar aposentado (virou ala de outro): todo o estado, histórico e visitas vão para o andar novo;
+    // se o agente já existe lá, fica o estado de lá e o histórico antigo é somado
+    mergeFloor(de, para) {
+      db.exec('BEGIN');
+      try {
+        let n = 0;
+        for (const r of ids.all(de)) { if (one.get(para, r.id)) apagaAgente.run(de, r.id); else moveAgent.run(para, de, r.id); n++; }
+        db.prepare('UPDATE events SET floor = ? WHERE floor = ?').run(para, de);
+        moveVisitas.run(para, de); sobraVisitas.run(de);
+        db.exec('COMMIT');
+        return n;
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+    },
+    floorsWithData() { return andaresComDados.all().map((r) => r.floor); },
     // troca as visitas de um dia inteiro; devolve as que estavam em atendimento e sumiram (canceladas)
     setVisits(floor, dia, lista) {
       const antes = new Map(visitasDoDia.all(floor, dia).map((r) => [r.id, r]));

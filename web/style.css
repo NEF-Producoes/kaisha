@@ -214,3 +214,8 @@ body.editing .zoom { display: none; }
   .panel { width: min(360px, 60%); padding: 12px 14px; }
   .retrato { width: 108px; height: 132px; float: left; margin: 0 12px 6px 0; }
 }
+
+/* atalhos por ala (andar único): zoom e centraliza na ala; "Tudo" volta ao prédio inteiro */
+.alas button.floor-tab { border: 0; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+@media (max-width: 640px) { .alas { grid-column: 1 / -1; grid-row: 3; justify-self: stretch; scrollbar-width: none; } .alas::-webkit-scrollbar { display: none; } }
+.overlay > .apagada { opacity: .25; transition: opacity .2s; }

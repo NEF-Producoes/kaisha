@@ -10,7 +10,7 @@ const I18N = {
     queue: (n) => `${n} na fila`, noDesk: 'Sem mesa', history: 'Histórico', close: 'Fechar', updated: 'atualizado',
     connected: 'ao vivo', reconnecting: 'reconectando…', noHistory: 'Sem eventos ainda.', configError: 'Erro na configuração',
     ago: (s) => (s < 60 ? 'agora' : s < 3600 ? `há ${Math.floor(s / 60)} min` : s < 86400 ? `há ${Math.floor(s / 3600)} h` : `há ${Math.floor(s / 86400)} d`),
-    theme: 'Tema', agents: 'agentes', today: 'HOJE', success: 'Sucesso', question: 'Pergunta', inWaiting: 'na espera',
+    theme: 'Tema', agents: 'agentes', today: 'HOJE', tudo: 'Tudo', success: 'Sucesso', question: 'Pergunta', inWaiting: 'na espera',
     needs: { sede: 'Sede', banheiro: 'Banheiro', social: 'Papo', diversao: 'Diversão', cansaco: 'Cansaço' },
     doing: { beber: 'tomando um café ou água', banheiro: 'no banheiro', celular: 'no celular, no sofá', ler: 'lendo um livro', cochilar: 'cochilando no sofá', papo: 'batendo papo', jogo_sinuca: 'jogando sinuca', jogo_pebolim: 'jogando pebolim', jogo_videogame: 'jogando videogame', almocar: 'almoçando', happy: 'no happy hour', embora: 'indo embora', casa: 'em casa', almocoFora: 'almoçando fora', aplaudir: 'aplaudindo', disfarce: 'disfarçando (o chefe passou)', indo: 'indo', livre: 'à toa', mesa: 'trabalhando na mesa', fixo: 'não sai da mesa' }, now: 'Agora', wins: 'Vitórias hoje',
   },
@@ -19,7 +19,7 @@ const I18N = {
     queue: (n) => `${n} queued`, noDesk: 'No desk', history: 'History', close: 'Close', updated: 'updated',
     connected: 'live', reconnecting: 'reconnecting…', noHistory: 'No events yet.', configError: 'Configuration error',
     ago: (s) => (s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`),
-    theme: 'Theme', agents: 'agents', today: 'TODAY', success: 'Success', question: 'Question', inWaiting: 'waiting room',
+    theme: 'Theme', agents: 'agents', today: 'TODAY', tudo: 'All', success: 'Success', question: 'Question', inWaiting: 'waiting room',
     needs: { sede: 'Thirst', banheiro: 'Bathroom', social: 'Chat', diversao: 'Fun', cansaco: 'Tiredness' },
     doing: { beber: 'having coffee or water', banheiro: 'in the bathroom', celular: 'on the phone, on the couch', ler: 'reading a book', cochilar: 'napping on the couch', papo: 'chatting', jogo_sinuca: 'playing pool', jogo_pebolim: 'playing foosball', jogo_videogame: 'playing video games', almocar: 'having lunch', happy: 'at happy hour', embora: 'heading home', casa: 'at home', almocoFora: 'out for lunch', aplaudir: 'clapping', disfarce: 'pretending to work', indo: 'on the way', livre: 'idling', mesa: 'working at the desk', fixo: 'stays at the desk' }, now: 'Now', wins: 'Wins today',
   },
@@ -1388,6 +1388,8 @@ function frame(t) {
   for (const c of state.chamadas.values()) desenhos.push({ y: 1e6, f: () => desenhaChamada(c) });
   desenhos.sort((a, b) => a.y - b.y).forEach((d) => d.f());
   desenhaNoite();
+  // ala em foco (atalhos): as outras salas ficam na penumbra
+  if (state.foco) { g.fillStyle = 'rgba(8,10,18,0.55)'; for (const r of state.layout.rooms) if (r.wing !== state.foco.id || r.common) g.fillRect(r.x * T, r.y * T, r.w * T, r.h * T); }
   desenhaCorreio(dt);
   desenhaConfete(dt);
   g.setTransform(state.scale, 0, 0, state.scale, 0, 0);
@@ -1686,6 +1688,7 @@ function resize() {
   let caber = Math.min(livreW / (bw + 2 * m), livreH / (bh + 2 * m));
   if (state.formato !== 'auto' && state.formato !== 'livre') { const v = calcularVista(W, H, state.formato); caber = Math.min(livreW / v.VW, livreH / v.VH); }
   const base = Math.max(minimo, Math.floor(caber * 4) / 4);
+  state.escalaBase = base; state.livre = { w: livreW, h: livreH };
   const s = Math.max(1, Math.min(12, Math.round(base * (state.zoom || 1) * 4) / 4));
   state.scale = s;
   // tamanho do mundo desenhado: no auto, o terreno preenche toda a área visível (ultrawide, celular em pé…)
@@ -1708,10 +1711,12 @@ function resize() {
   overlay.style.setProperty('--s', s);
   board.style.transform = '';
   placeOverlay();
-  // maior que a tela (celular, zoom): centraliza no prédio
+  // maior que a tela (celular, zoom): centraliza no prédio, ou na ala escolhida nos atalhos
   if (canvas.width > livreW || canvas.height > livreH) {
-    stage.scrollLeft = Math.max(0, state.off.x + (bw * s - stage.clientWidth) / 2);
-    stage.scrollTop = Math.max(0, state.off.y + (bh * s - stage.clientHeight) / 2);
+    const f = state.foco;
+    const cx = f ? (f.x + f.w / 2) * T * s : bw * s / 2, cy = f ? (f.y + f.h / 2) * T * s : bh * s / 2;
+    stage.scrollLeft = Math.max(0, state.off.x + cx - stage.clientWidth / 2);
+    stage.scrollTop = Math.max(0, state.off.y + cy - stage.clientHeight / 2);
   }
   const zl = document.getElementById('z-nivel'); if (zl) zl.textContent = Math.round((state.zoom || 1) * 100) + '%';
 }
@@ -1720,10 +1725,35 @@ function resize() {
 // durante o gesto o quadro só é esticado com CSS; a escala de verdade (e o terreno) é refeita no fim
 const board = document.querySelector('.board');
 try { state.zoom = Number(localStorage.getItem('kaisha:zoom')) || 1; } catch { state.zoom = 1; }
-function aplicarZoom(z) {
+function aplicarZoom(z, guardar = true) {
   state.zoom = Math.max(0.5, Math.min(4, z));
-  try { localStorage.setItem('kaisha:zoom', String(state.zoom)); } catch { /* sem armazenamento */ }
+  if (guardar) { state.foco = null; marcarAla(null); try { localStorage.setItem('kaisha:zoom', String(state.zoom)); } catch { /* sem armazenamento */ } }
   resize();
+}
+// atalhos por ala: dá zoom na ala (as salas dela) e centraliza; null = prédio inteiro
+function focarAla(id) {
+  const salas = id ? state.layout.rooms.filter((r) => r.wing === id && !r.common) : [];
+  if (!salas.length) { state.foco = null; marcarAla(null); aplicarZoom(1, false); return; }
+  const x0 = Math.min(...salas.map((r) => r.x)), y0 = Math.min(...salas.map((r) => r.y));
+  const x1 = Math.max(...salas.map((r) => r.x + r.w)), y1 = Math.max(...salas.map((r) => r.y + r.h));
+  state.foco = { id, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  marcarAla(id);
+  const L0 = state.livre || { w: stage.clientWidth, h: stage.clientHeight };
+  const alvo = Math.min(L0.w / ((x1 - x0 + 1) * T), L0.h / ((y1 - y0 + 1) * T));
+  aplicarZoom(alvo / (state.escalaBase || 1), false);
+}
+function marcarAla(id) {
+  for (const b of document.querySelectorAll('#alas button')) b.toggleAttribute('aria-current', (b.dataset.ala || null) === id);
+  // placas e balões de quem é de outra ala também ficam apagados
+  for (const [aid, n] of nodes) { const fora = !!id && (state.alaDe && state.alaDe.get(aid)) !== id; for (const x of [n.plate, n.bubble]) x.classList.toggle('apagada', fora); }
+}
+function mostrarAlas() {
+  const nav = $('#alas'), alas = state.alas || [];
+  nav.hidden = alas.length < 2;
+  if (nav.hidden) return;
+  const bt = (id, nome) => { const b = el('button', 'floor-tab', nome); b.type = 'button'; if (id) b.dataset.ala = id; b.addEventListener('click', () => focarAla(id)); return b; };
+  nav.replaceChildren(bt(null, L.tudo || 'Tudo'), ...alas.map((w) => bt(w.id, w.name)));
+  marcarAla(state.foco ? state.foco.id : null);
 }
 function previa(fator) { board.style.transformOrigin = 'center center'; board.style.transform = `scale(${fator})`; }
 (() => {
@@ -1883,7 +1913,8 @@ async function fillPanel(agent, carregar) {
   const st = statusOf(agent.id);
   $('#p-name').textContent = agent.name || agent.id;
   desenharRetrato($('#p-retrato'), agentLook(agent), agent.name || agent.id, { erro: st === 'error' });
-  $('#p-role').textContent = [agent.role, agent.id !== agent.name ? agent.id : ''].filter(Boolean).join(' · ');
+  const alaNome = state.alaDe && state.alaDe.get(agent.id) ? ((state.alas || []).find((w) => w.id === state.alaDe.get(agent.id)) || {}).name : '';
+  $('#p-role').textContent = [agent.role, agent.id !== agent.name ? agent.id : '', alaNome ? 'ala ' + alaNome : ''].filter(Boolean).join(' · ');
   $('#p-status').textContent = (L[st] || st) + (a && a.queue ? ' · ' + L.queue(a.queue) : '');
   $('#p-status').dataset.status = st;
   $('#p-task').textContent = a && a.task ? a.task : '';
@@ -1965,7 +1996,8 @@ function rebuild() {
   if (!state.snap) return;
   // a planta mudou: as visitas reaparecem direto no lugar
   state.lugaresVisita = null; state.visitas.clear(); state.visitasProntas = false;
-  buildLayout(); buildStatic(); syncEntities(); buildOverlay(); resize();
+  buildLayout(); buildStatic(); syncEntities(); buildOverlay(); resize(); mostrarAlas();
+  if (state.focoInicial) { const f = state.focoInicial; state.focoInicial = null; requestAnimationFrame(() => focarAla(f)); }
 }
 function upsertAgents(list) {
   let novo = false;
@@ -1986,6 +2018,7 @@ async function loadState() {
   if (resp.status === 404 && ANDAR) { location.replace(location.pathname); return; }
   const r = await resp.json();
   state.floor = r.floor;
+  if (r.focus && !state.focoUsado) { state.focoInicial = r.focus; state.focoUsado = true; } // link antigo ?andar=nef: abre na ala
   mostrarAndares(r.floors);
   state.offlineAfterMs = r.offlineAfterMs || state.offlineAfterMs;
   state.clockSkew = Date.now() - r.serverTime;
