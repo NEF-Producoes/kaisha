@@ -63,21 +63,25 @@ export function desenharTerreno(v, bw, bh, semente = 1, ocupado = () => true) {
   const { VW, VH, OX, OY } = v;
   const c = document.createElement('canvas'); c.width = VW; c.height = VH;
   const g = c.getContext('2d');
-  // grama
-  const gr = ['#4f7d43', '#5a8a4a', '#679852', '#78a85c'];
+  // grama, calçada e sombra são pintadas direto num buffer (rápido mesmo em telas ultrawide)
+  const img = g.createImageData(VW, VH), buf = new Uint32Array(img.data.buffer);
+  const cor32 = (hex) => { const n = parseInt(hex.slice(1), 16); return (255 << 24) | ((n & 255) << 16) | (n & 0xff00) | (n >> 16); };
+  const GR = ['#4f7d43', '#5a8a4a', '#679852', '#78a85c'].map(cor32);
   for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
     const n = sorte(x * 73856093 ^ y * 19349663 ^ semente);
-    px(g, gr[n < 0.12 ? 0 : n < 0.62 ? 1 : n < 0.93 ? 2 : 3], x, y);
+    buf[y * VW + x] = GR[n < 0.12 ? 0 : n < 0.62 ? 1 : n < 0.93 ? 2 : 3];
   }
+  const TUFO = cor32('#3f6a3a'), TUFO2 = cor32('#86b866');
+  const poe = (x, y, c) => { if (x >= 0 && y >= 0 && x < VW && y < VH) buf[y * VW + x] = c; };
   for (let k = 0; k < (VW * VH) / 180; k++) {
     const x = Math.floor(sorte(k * 7 + semente) * VW), y = Math.floor(sorte(k * 13 + 5 + semente) * VH);
-    px(g, '#3f6a3a', x, y + 1, 3, 1); px(g, '#86b866', x + 1, y, 1, 1);
+    poe(x, y + 1, TUFO); poe(x + 1, y + 1, TUFO); poe(x + 2, y + 1, TUFO); poe(x + 1, y, TUFO2);
   }
   // máscara do prédio (pixel a pixel) e faixas em volta dele
   const dentro = new Uint8Array(VW * VH);
   for (let ty = 0; ty * T < bh; ty++) for (let tx = 0; tx * T < bw; tx++) {
     if (!ocupado(tx, ty)) continue;
-    for (let y = OY + ty * T; y < OY + (ty + 1) * T; y++) dentro.fill(1, y * VW + OX + tx * T, y * VW + OX + (tx + 1) * T);
+    for (let y = OY + ty * T; y < OY + (ty + 1) * T; y++) if (y >= 0 && y < VH) dentro.fill(1, y * VW + Math.max(0, OX + tx * T), y * VW + Math.min(VW, OX + (tx + 1) * T));
   }
   const dilata = (m, r) => {
     const h = new Uint8Array(VW * VH), o = new Uint8Array(VW * VH);
@@ -87,22 +91,26 @@ export function desenharTerreno(v, bw, bh, semente = 1, ocupado = () => true) {
   };
   const cal = 8;
   const calcada = dilata(dentro, cal);
-  // calçada (meio bloco em volta das salas), com juntas e borda
   const tc = tons('#bdb7ae');
+  const C0 = cor32('#bdb7ae'), CSH = cor32(tc.sh), CHI = cor32(tc.hi), CDK = cor32(tc.dk);
   const ehCal = (x, y) => x >= 0 && y >= 0 && x < VW && y < VH && calcada[y * VW + x] && !dentro[y * VW + x];
   const ehPredio = (x, y) => x >= 0 && y >= 0 && x < VW && y < VH && dentro[y * VW + x];
+  const grama = (a, b) => !ehCal(a, b) && !ehPredio(a, b);
   for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
     if (!ehCal(x, y)) continue;
-    const grama = (a, b) => !ehCal(a, b) && !ehPredio(a, b);
-    let cor = '#bdb7ae';
-    if ((x - OX + cal) % 16 === 0 || (y - OY + cal) % 16 === 0) cor = tc.sh;
-    if (grama(x - 1, y) || grama(x, y - 1)) cor = tc.hi;
-    if (grama(x + 1, y) || grama(x, y + 1)) cor = tc.dk;
-    px(g, cor, x, y);
+    let c = C0;
+    if ((x - OX + cal) % 16 === 0 || (y - OY + cal) % 16 === 0) c = CSH;
+    if (grama(x - 1, y) || grama(x, y - 1)) c = CHI;
+    if (grama(x + 1, y) || grama(x, y + 1)) c = CDK;
+    buf[y * VW + x] = c;
   }
-  // sombra do prédio no chão (luz de cima à esquerda)
-  g.fillStyle = 'rgba(30,20,40,0.35)';
-  for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) if (!ehPredio(x, y) && (ehPredio(x - 4, y - 4) || ehPredio(x - 2, y - 2))) g.fillRect(x, y, 1, 1);
+  // sombra do prédio no chão (luz de cima à esquerda): mistura 35% com roxo escuro
+  for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+    if (ehPredio(x, y) || !(ehPredio(x - 4, y - 4) || ehPredio(x - 2, y - 2))) continue;
+    const v = buf[y * VW + x], r = v & 255, gg = (v >> 8) & 255, bb = (v >> 16) & 255;
+    buf[y * VW + x] = (255 << 24) | (Math.round(bb * 0.65 + 40 * 0.35) << 16) | (Math.round(gg * 0.65 + 20 * 0.35) << 8) | Math.round(r * 0.65 + 30 * 0.35);
+  }
+  g.putImageData(img, 0, 0);
   // postes nos cantos de fora da calçada
   const cx0 = OX - cal, cy0 = OY - cal, cw = bw + cal * 2, ch = bh + cal * 2;
   const postes = [[cx0 - 4, cy0 + ch + 2], [cx0 + cw + 4, cy0 + ch + 2], [cx0 - 4, cy0 + 26], [cx0 + cw + 4, cy0 + 26]]

@@ -85,8 +85,12 @@ function buildLayout() {
     W = Math.max(W, w); H += 6;
   }
   state.layout = { rooms, desks, W, H };
-  // formato da tela: o prédio fica no meio de um terreno (16:9 por padrão; "formato: livre" desliga)
-  state.view = calcularVista(W, H, office.aspect);
+  // formato da tela: auto (padrão: o terreno em volta do prédio acompanha a proporção da tela),
+  // uma proporção fixa ("16:9", "21:9"…) ou livre (só o prédio, sem terreno)
+  const fmt = String(office.aspect ?? 'auto').trim().toLowerCase();
+  state.formato = ['livre', 'free', 'nenhum', 'none'].includes(fmt) ? 'livre' : /^\d/.test(fmt) ? fmt : 'auto';
+  state.view = { VW: W * T, VH: H * T, OX: 0, OY: 0, fora: false };
+  state.terrenoChave = '';
   buildNav();
 }
 
@@ -243,9 +247,9 @@ function buildStatic() {
   const c = document.createElement('canvas'); c.width = W * T; c.height = H * T;
   const s = c.getContext('2d');
   // com terreno, os cantos vazios da planta ficam transparentes e mostram a grama; sem terreno, fundo escuro
-  const ocupado = (tx, ty) => rooms.some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h);
-  state.terreno = state.view.fora ? desenharTerreno(state.view, W * T, H * T, hashStr(state.snap.office.name || 'k'), ocupado) : null;
-  if (!state.terreno) { s.fillStyle = '#1b1f27'; s.fillRect(0, 0, c.width, c.height); }
+  state.ocupado = (tx, ty) => rooms.some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h);
+  state.terrenoChave = ''; // o terreno é (re)feito no resize, porque depende do tamanho da tela
+  if (state.formato === 'livre') { s.fillStyle = '#1b1f27'; s.fillRect(0, 0, c.width, c.height); }
   const tint = state.snap.theme && state.snap.theme.floorTint;
   for (const r of rooms) {
     const topo = temParede(r) ? 2 : 0;
@@ -1570,24 +1574,77 @@ function drawEffect() {
 function resize() {
   if (!state.layout) return;
   const { W, H } = state.layout;
-  const { VW, VH, OX, OY } = state.view;
-  // cabe inteiro na tela (largura e altura), em passos de 1/4 para os pixels ficarem uniformes;
-  // em telas muito pequenas fica no mínimo 1,5x com rolagem, para os nomes continuarem legíveis
+  const bw = W * T, bh = H * T;
   const cs = getComputedStyle(stage);
   const livreW = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   const livreH = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-  let s = Math.min(livreW / VW, livreH / VH);
-  s = Math.max(1.5, Math.floor(s * 4) / 4);
+  const m = state.formato === 'livre' ? 0 : T; // pelo menos um bloco de terreno em volta do prédio
+  // escala: o prédio cabe inteiro, em passos de 1/4 para os pixels ficarem uniformes; em tela pequena
+  // (celular) não fica abaixo de 2x, para os nomes serem legíveis, e dá para arrastar e dar zoom
+  const pequena = Math.min(innerWidth, innerHeight) < 600;
+  const minimo = pequena ? 2 : 1.5;
+  let caber = Math.min(livreW / (bw + 2 * m), livreH / (bh + 2 * m));
+  if (state.formato !== 'auto' && state.formato !== 'livre') { const v = calcularVista(W, H, state.formato); caber = Math.min(livreW / v.VW, livreH / v.VH); }
+  const base = Math.max(minimo, Math.floor(caber * 4) / 4);
+  const s = Math.max(1, Math.min(12, Math.round(base * (state.zoom || 1) * 4) / 4));
   state.scale = s;
-  state.off = { x: Math.round(OX * s), y: Math.round(OY * s) };
-  canvas.width = Math.round(VW * s); canvas.height = Math.round(VH * s);
+  // tamanho do mundo desenhado: no auto, o terreno preenche toda a área visível (ultrawide, celular em pé…)
+  let v;
+  if (state.formato === 'livre') v = { VW: bw, VH: bh, OX: 0, OY: 0, fora: false };
+  else if (state.formato === 'auto') {
+    const VW = Math.max(bw + 2 * m, Math.floor(livreW / s)), VH = Math.max(bh + 2 * m, Math.floor(livreH / s));
+    v = { VW, VH, OX: Math.round((VW - bw) / 2), OY: Math.round((VH - bh) / 2), fora: true };
+  } else v = calcularVista(W, H, state.formato);
+  state.view = v;
+  const chave = `${v.VW}x${v.VH}:${v.OX},${v.OY}`;
+  if (v.fora && chave !== state.terrenoChave) { state.terreno = desenharTerreno(v, bw, bh, hashStr(state.snap.office.name || 'k'), state.ocupado); state.terrenoChave = chave; }
+  if (!v.fora) state.terreno = null;
+  state.off = { x: Math.round(v.OX * s), y: Math.round(v.OY * s) };
+  canvas.width = Math.round(v.VW * s); canvas.height = Math.round(v.VH * s);
   canvas.style.width = canvas.width + 'px'; canvas.style.height = canvas.height + 'px';
   // nomes e áreas de clique ficam só sobre o prédio
   overlay.style.inset = 'auto'; overlay.style.left = state.off.x + 'px'; overlay.style.top = state.off.y + 'px';
-  overlay.style.width = W * T * s + 'px'; overlay.style.height = H * T * s + 'px';
+  overlay.style.width = bw * s + 'px'; overlay.style.height = bh * s + 'px';
   overlay.style.setProperty('--s', s);
+  board.style.transform = '';
   placeOverlay();
+  // maior que a tela (celular, zoom): centraliza no prédio
+  if (canvas.width > livreW || canvas.height > livreH) {
+    stage.scrollLeft = Math.max(0, state.off.x + (bw * s - stage.clientWidth) / 2);
+    stage.scrollTop = Math.max(0, state.off.y + (bh * s - stage.clientHeight) / 2);
+  }
+  const zl = document.getElementById('z-nivel'); if (zl) zl.textContent = Math.round((state.zoom || 1) * 100) + '%';
 }
+
+// ---------- zoom: botões, Ctrl + roda do mouse e pinça (dois dedos) ----------
+// durante o gesto o quadro só é esticado com CSS; a escala de verdade (e o terreno) é refeita no fim
+const board = document.querySelector('.board');
+try { state.zoom = Number(localStorage.getItem('kaisha:zoom')) || 1; } catch { state.zoom = 1; }
+function aplicarZoom(z) {
+  state.zoom = Math.max(0.5, Math.min(4, z));
+  try { localStorage.setItem('kaisha:zoom', String(state.zoom)); } catch { /* sem armazenamento */ }
+  resize();
+}
+function previa(fator) { board.style.transformOrigin = 'center center'; board.style.transform = `scale(${fator})`; }
+(() => {
+  const ui = document.createElement('div'); ui.className = 'zoom';
+  ui.innerHTML = '<button type="button" data-z="-" aria-label="Diminuir">−</button><span id="z-nivel">100%</span><button type="button" data-z="+" aria-label="Aumentar">+</button><button type="button" data-z="0" aria-label="Ajustar à tela" title="Ajustar à tela">⤢</button>';
+  ui.addEventListener('click', (ev) => { const z = ev.target.closest('button')?.dataset.z; if (!z) return; aplicarZoom(z === '0' ? 1 : (state.zoom || 1) * (z === '+' ? 1.25 : 0.8)); });
+  document.body.append(ui);
+  let roda = null, acum = 1;
+  stage.addEventListener('wheel', (ev) => {
+    if (!ev.ctrlKey && !ev.metaKey) return;
+    ev.preventDefault();
+    acum *= Math.exp(-ev.deltaY * 0.002); previa(acum);
+    clearTimeout(roda); roda = setTimeout(() => { const f = acum; acum = 1; aplicarZoom((state.zoom || 1) * f); }, 160);
+  }, { passive: false });
+  const dedos = new Map(); let ini = 0, fator = 1;
+  const dist = () => { const [a, b] = [...dedos.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  stage.addEventListener('pointerdown', (ev) => { if (ev.pointerType !== 'touch') return; dedos.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); if (dedos.size === 2) { ini = dist(); fator = 1; } });
+  stage.addEventListener('pointermove', (ev) => { if (!dedos.has(ev.pointerId)) return; dedos.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); if (dedos.size === 2 && ini) { fator = dist() / ini; previa(fator); } });
+  const solta = (ev) => { if (!dedos.has(ev.pointerId)) return; dedos.delete(ev.pointerId); if (ini && dedos.size < 2) { ini = 0; if (Math.abs(fator - 1) > 0.05) aplicarZoom((state.zoom || 1) * fator); else board.style.transform = ''; } };
+  stage.addEventListener('pointerup', solta); stage.addEventListener('pointercancel', solta);
+})();
 
 const nodes = new Map();
 function buildOverlay() {
@@ -1847,7 +1904,8 @@ function connect() {
   es.onopen = () => { if (caiu) { caiu = false; loadState().catch(() => {}); } };
 }
 
-window.addEventListener('resize', resize);
+let esperaResize = null;
+window.addEventListener('resize', () => { clearTimeout(esperaResize); esperaResize = setTimeout(resize, 120); });
 setInterval(refreshOverlay, 15000); // vira "offline" sem precisar de evento
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString(document.documentElement.lang, { hour: '2-digit', minute: '2-digit' }); }, 1000);
 

@@ -7,7 +7,7 @@
 
 nome: Minha Empresa
 tema: auto            # auto = segue o calendário · natal, junina, ... · nenhum
-formato: "16:9"       # formato da tela: 16:9 (padrão), 4:3, 21:9… ou livre (só o prédio, sem área externa)
+formato: auto         # auto (o terreno acompanha a tela), "16:9", "21:9"… ou livre (só o prédio)
 calendario: br
 
 salas:

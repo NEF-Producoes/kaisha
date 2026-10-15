@@ -149,3 +149,67 @@ body.editing .overlay > * { pointer-events: none; }
 body.editing canvas { cursor: crosshair; }
 body.editing .stage { padding-right: min(396px, 100%); }
 .editor[hidden], .ed-tabs[hidden], .ed-foot[hidden] { display: none; }
+
+/* ---------- responsivo: celular, tablet, notebook, 4K e ultrawide ---------- */
+.stage { touch-action: pan-x pan-y; overscroll-behavior: contain; }
+.board { transition: transform .08s linear; will-change: transform; }
+/* controles de zoom (−, nível, +, ajustar) no canto de baixo */
+.zoom { position: fixed; right: 14px; bottom: 14px; z-index: 6; display: flex; align-items: center; gap: 2px; padding: 3px; background: rgb(23 26 33 / .88); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(4px); }
+.zoom button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font-size: 17px; cursor: pointer; line-height: 1; }
+.zoom button:hover { background: #2a303c; }
+.zoom span { min-width: 42px; text-align: center; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+body.editing .zoom { display: none; }
+.brand strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* telas largas (4K, ultrawide): cabeçalho um pouco maior, o resto acompanha a escala do mapa */
+@media (min-width: 2200px) {
+  html, body { font-size: 16px; }
+  .top { padding: 12px 24px; }
+  .brand strong { font-size: 17px; }
+  .floor-tab { font-size: 15px; padding: 6px 16px; }
+  .panel { width: 420px; }
+  .editor { width: 440px; }
+  body.editing .stage { padding-right: 456px; }
+}
+
+/* tablet e celular */
+@media (max-width: 900px) {
+  .top { padding: 8px 12px; gap: 8px; }
+  .score { display: none; }
+}
+@media (max-width: 640px) {
+  /* cabeçalho em duas linhas fixas: marca + relógio/editar em cima, andares roláveis embaixo */
+  .top { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .brand { gap: 8px; }
+  .brand #counts, .right #theme { display: none; }
+  .floors { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; scrollbar-width: none; }
+  .floors::-webkit-scrollbar { display: none; }
+  .floor-tab { padding: 6px 12px; }
+  .right { gap: 8px; }
+  #edit-btn { padding: 5px 9px; }
+  .stage { padding: 0; }
+  .board, canvas { border-radius: 0; box-shadow: none; }
+  .foot { display: none; }
+  .banner { padding: 4px 10px; font-size: 13px; }
+  .zoom { right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); }
+  /* painel do agente vira uma folha que sobe de baixo */
+  .panel { top: auto; bottom: 0; left: 0; right: 0; width: 100%; height: auto; max-height: 78dvh; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 30px rgb(0 0 0 / .45); }
+  .panel::before { content: ""; position: absolute; top: 6px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: #3a3f4b; }
+  .retrato { width: 144px; height: 176px; margin: 2px auto 10px; }
+  .history li { grid-template-columns: 78px 70px 1fr; }
+  /* editor: metade de baixo da tela, o mapa continua visível em cima para tocar e posicionar */
+  .editor { top: auto; bottom: 0; width: 100%; height: 58dvh; border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; }
+  body.editing .stage { padding-right: 0; padding-bottom: 58dvh; }
+  .ed-tabs { overflow-x: auto; }
+}
+/* celular deitado e telas baixas: cabeçalho numa linha só, sem rodapé */
+@media (max-height: 520px) {
+  .top { display: flex; flex-wrap: nowrap; padding: 4px 10px; }
+  .floors { order: 0; flex: 1 1 auto; min-width: 0; }
+  .brand #counts, .brand .score, .right #theme { display: none; }
+  .banner { padding: 2px 10px; font-size: 12px; }
+  .foot { display: none; }
+  .stage { padding: 0; }
+  .panel { width: min(360px, 60%); padding: 12px 14px; }
+  .retrato { width: 108px; height: 132px; float: left; margin: 0 12px 6px 0; }
+}

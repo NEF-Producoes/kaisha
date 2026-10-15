@@ -59,7 +59,8 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
     document.body.classList.remove('editing');
     painel.hidden = true;
     window.dispatchEvent(new Event('resize'));
-    if (!salvo) { state.snap = { ...state.snap, office: original }; rebuild(); }
+    // fechou sem salvar: volta ao escritório de antes (se nem chegou a editar, não há nada para desfazer)
+    if (!salvo && original) { state.snap = { ...state.snap, office: original }; rebuild(); }
     if (state.pendingSnap) { const p = state.pendingSnap; state.pendingSnap = null; applySnapshot(p); }
   }
   function pedirChave(erro) {
