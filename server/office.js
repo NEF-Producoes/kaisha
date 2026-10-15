@@ -52,6 +52,7 @@ export function validateOffice(raw) {
   rooms.forEach((r) => {
     if (r.wing != null && r.wing !== '' && !wingIds.has(String(r.wing))) erros.push(`sala "${r.id}": ala "${r.wing}" não existe (declare em alas)`);
     if (r.wing && (r.common === true || r.common === 'sim')) erros.push(`sala "${r.id}": use ala ou comum, não os dois`);
+    if (Array.isArray(r.common)) for (const w of r.common) if (!wingIds.has(String(w))) erros.push(`sala "${r.id}": comum para a ala "${w}", que não existe`);
   });
   // passagens: pares de salas ligadas (sem a lista, toda divisa tem passagem); entradas: portas para fora
   const passages = Array.isArray(o.passages) ? o.passages.filter((p) => Array.isArray(p) && p.length === 2).map((p) => p.map(String)) : null;
@@ -95,7 +96,8 @@ export function validateOffice(raw) {
       })),
       rooms: rooms.map((r) => ({
         id: String(r.id), name: String(r.name ?? r.id), area: r.area, floor: r.floor || 'madeira', wall: r.wall || 'clara',
-        wing: r.wing != null && r.wing !== '' ? String(r.wing) : null, common: r.common === true || r.common === 'sim',
+        // comum: true (todas as alas) ou a lista das alas que usam a sala (ex.: [nef, musashi])
+        wing: r.wing != null && r.wing !== '' ? String(r.wing) : null, common: Array.isArray(r.common) && r.common.length ? r.common.map(String) : r.common === true || r.common === 'sim',
         // sala de espera: onde as visitas (pacientes, clientes) aguardam até a hora marcada
         kind: ['espera', 'waiting', 'sala_de_espera', 'recepcao_espera'].includes(String(r.type ?? r.kind ?? '').toLowerCase()) ? 'waiting' : null,
       })),
@@ -300,7 +302,7 @@ export function toYaml(o) {
     calendario: o.calendar && o.calendar !== 'br' ? o.calendar : null,
     idioma: o.lang,
     alas: o.wings && o.wings.length ? o.wings.map((w) => limpa({ id: w.id, nome: w.name !== w.id ? w.name : null, expediente: w.hours, almoco: w.lunch, happy_hour: w.happy_hour })) : null,
-    salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null, ala: r.wing || null, comum: r.common || null })),
+    salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null, ala: r.wing || null, comum: Array.isArray(r.common) ? r.common : r.common || null })),
     agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null, fica_na_sala: a.stay || null, fica_na_mesa: a.fixed || null, penteado: a.hairstyle === 'long' ? 'longo' : a.hairstyle === 'short' ? 'curto' : null, monitores: a.monitors || null })),
     moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
     passagens: o.passages && o.passages.length ? o.passages : null,

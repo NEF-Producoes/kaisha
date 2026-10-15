@@ -94,6 +94,11 @@ function buildLayout() {
     d.wing = r && !r.common ? r.wing || null : null;
     state.alaDe.set(d.agent.id, d.wing);
   }
+  // sala comum vale para todas as alas (comum: true) ou só para as listadas (comum: [nef, musashi])
+  state.salaDaAla = (r, ala) => !!r && (r.wing === ala || r.common === true || (Array.isArray(r.common) && r.common.includes(ala)));
+  // relógio de cada ala: os horários da ala, ou os do andar quando a ala não define
+  state.relogioAla = new Map();
+  if (office.clock !== false) for (const w of state.alas) state.relogioAla.set(w.id, lerRelogio({ ...office, hours: w.hours || office.hours, lunch: w.lunch || office.lunch, happy_hour: w.happy_hour || office.happy_hour }));
   // formato da tela: auto (padrão: o terreno em volta do prédio acompanha a proporção da tela),
   // uma proporção fixa ("16:9", "21:9"…) ou livre (só o prédio, sem terreno)
   const fmt = String(office.aspect ?? 'auto').trim().toLowerCase();
@@ -240,7 +245,17 @@ function vizinhos(i, W, H) {
   if (x > 0) out.push(i - 1); if (x < W - 1) out.push(i + 1); if (y > 0) out.push(i - W); if (y < H - 1) out.push(i + W);
   return out;
 }
-function caminho(de, ate) {
+// com o agente (e), a rota prefere a ala dele e as salas comuns; só corta por outra ala se não houver outro jeito
+function caminho(de, ate, e) {
+  const ala = e && e.agent && state.alaDe && state.alaDe.get(e.agent.id);
+  if (ala) {
+    const { floor } = state.nav, rooms = state.layout.rooms;
+    const p = rota(de, ate, (n) => state.salaDaAla(rooms[floor[n]], ala));
+    if (p) return p;
+  }
+  return rota(de, ate, null);
+}
+function rota(de, ate, pode) {
   const { W, H, pass } = state.nav;
   if (de === ate) return [ate];
   const prev = new Int32Array(W * H).fill(-1); prev[de] = de;
@@ -248,7 +263,7 @@ function caminho(de, ate) {
   for (let q = 0; q < fila.length; q++) {
     const c = fila[q];
     if (c === ate) break;
-    for (const n of vizinhos(c, W, H)) if (prev[n] < 0 && pass(c, n)) { prev[n] = c; fila.push(n); }
+    for (const n of vizinhos(c, W, H)) if (prev[n] < 0 && pass(c, n) && (!pode || n === ate || pode(n))) { prev[n] = c; fila.push(n); }
   }
   if (prev[ate] < 0) return null;
   const out = []; for (let c = ate; c !== de; c = prev[c]) out.push(c);
@@ -433,7 +448,7 @@ function syncEntities() {
     else {
       e = { id, desk: d, agent: d.agent, seat, look: agentLook(d.agent), path: [], facing: 'down', step: 0, timer: 0, last: st };
       // abriu o painel fora do expediente: quem está livre já está em casa
-      if (!ATIVO.has(st) && !d.agent.central && state.relogioCfg && periodo() === 'noite') Object.assign(e, { mode: 'casa', fora: 'casa', alfa: 0, x: seat.x, y: seat.y, path: [] });
+      if (!ATIVO.has(st) && !d.agent.central && state.relogioCfg && periodoDe({ agent: d.agent }) === 'noite') Object.assign(e, { mode: 'casa', fora: 'casa', alfa: 0, x: seat.x, y: seat.y, path: [] });
       else if (naMesa(d.agent) || ATIVO.has(st) || seat.entrada < 0) sentar(e);
       else {
         // começa em pé num lugar qualquer da mesma região da mesa
@@ -457,10 +472,20 @@ function syncEntities() {
 function areaDoAgente(e, aqui) {
   const nav = state.nav;
   const lista = nav.comps[nav.comp[aqui]] || [];
-  if (!e.agent.stay || e.seat.entrada < 0) return lista;
-  const sala = nav.floor[e.seat.entrada];
-  const dentro = lista.filter((i) => nav.floor[i] === sala);
-  return dentro.length ? dentro : lista;
+  let area = lista;
+  if (e.agent.stay && e.seat.entrada >= 0) {
+    const sala = nav.floor[e.seat.entrada];
+    const dentro = lista.filter((i) => nav.floor[i] === sala);
+    if (dentro.length) area = dentro;
+  }
+  // com alas: livre, o agente só circula na própria ala e nas salas comuns (a copa da clínica é só da clínica)
+  const ala = state.alaDe && state.alaDe.get(e.agent.id);
+  if (ala) {
+    const rooms = state.layout.rooms;
+    const daAla = area.filter((i) => state.salaDaAla(rooms[nav.floor[i]], ala));
+    if (daAla.length) area = daAla;
+  }
+  return area;
 }
 function sentar(e) { Object.assign(e, { mode: 'seated', x: e.seat.x, y: e.seat.y, path: [], timer: rnd(1500, 4000) }); }
 function levantar(e) {
@@ -476,7 +501,7 @@ function passear(e) {
   const area = new Set(lista);
   const pois = nav.pois.filter((i) => area.has(i));
   const alvo = pois.length && Math.random() < 0.4 ? pois[(Math.random() * pois.length) | 0] : lista[(Math.random() * lista.length) | 0];
-  const p = caminho(aqui, alvo);
+  const p = caminho(aqui, alvo, e);
   if (!p || !p.length) { e.mode = 'pause'; e.timer = rnd(1000, 3000); return; }
   e.path = p; e.mode = 'walk'; e.poi = pois.includes(alvo);
 }
@@ -485,7 +510,7 @@ function irParaMesa(e, calmo = false) {
   // dia de atendimento: antes de ir para a mesa, busca o paciente na sala de espera
   if (!calmo && buscarPaciente(e)) return;
   const aqui = blocoDe(e.x, e.y);
-  const p = e.seat.entrada >= 0 ? caminho(aqui, e.seat.entrada) : null;
+  const p = e.seat.entrada >= 0 ? caminho(aqui, e.seat.entrada, e) : null;
   if (!p) { sentar(e); return; }
   e.path = p; e.mode = calmo ? 'voltar' : 'run';
 }
@@ -526,7 +551,7 @@ function irAoCafe(e) {
   const nav = state.nav, aqui = blocoDe(e.x, e.y);
   const area = new Set(areaDoAgente(e, aqui));
   const opcoes = nav.cafes.filter((i) => area.has(i));
-  const p = opcoes.length ? caminho(aqui, opcoes[(Math.random() * opcoes.length) | 0]) : null;
+  const p = opcoes.length ? caminho(aqui, opcoes[(Math.random() * opcoes.length) | 0], e) : null;
   if (p && p.length) { e.path = p; e.mode = 'walk'; e.poi = true; } else { e.mode = 'pause'; e.timer = rnd(800, 2000); }
 }
 // ---------- vontades (o que cada um faz quando está livre) ----------
@@ -550,7 +575,7 @@ function envelhecer(e, st, dt) {
 function decidir(e) {
   const v = e.vont, nav = state.nav;
   // o relógio manda antes das vontades: fora do expediente vai para casa; no almoço come; sexta tem happy hour
-  const per = state.periodo;
+  const per = periodoDe(e);
   if (per === 'noite' && !e.agent.central) { irEmbora(e); return; }
   if (per === 'almoco' && e.almoco !== hojeChave() && !naMesa(e.agent)) {
     e.almoco = hojeChave();
@@ -583,7 +608,7 @@ function comecar(e, tipo) {
   let melhor = null;
   for (const a of alvos) {
     if (!area.has(a.tile) || state.slots.has(a.key)) continue;
-    const p = caminho(aqui, a.tile);
+    const p = caminho(aqui, a.tile, e);
     if (p && (!melhor || p.length < melhor.p.length)) melhor = { a, p };
   }
   if (!melhor) return false;
@@ -602,7 +627,7 @@ function comecarPapo(e, aqui, area) {
     // de preferência um em cima do outro, para as placas de nome não se encavalarem
     const lados = [ot + W, ot - W, ot - 1, ot + 1].filter((i) => i >= 0 && i < walk.length && walk[i] && pass(ot, i) && area.has(i));
     let melhor = null;
-    for (const t of lados) { const p = caminho(aqui, t); if (p && (!melhor || p.length < melhor.p.length)) melhor = { p }; }
+    for (const t of lados) { const p = caminho(aqui, t, e); if (p && (!melhor || p.length < melhor.p.length)) melhor = { p }; }
     if (!melhor) continue;
     // o outro para onde está e espera
     Object.assign(o, centroBloco(ot), { path: [], mode: 'atividade', atv: { tipo: 'esperaPapo', com: e.id }, timer: 25000, indo: false });
@@ -701,14 +726,14 @@ function comecarJogo(e, aqui, area) {
     .sort((a, b) => (b.vont.diversao + b.vont.social / 2) - (a.vont.diversao + a.vont.social / 2));
   const opcoes = L2.jogos.filter((j) => !state.slots.has('g:' + j.id) && area.has(j.spots[0].tile)).sort(() => Math.random() - 0.5);
   for (const j of opcoes) {
-    const p0 = caminho(aqui, j.spots[0].tile);
+    const p0 = caminho(aqui, j.spots[0].tile, e);
     if (!p0) continue;
     // parceiro: alguém que alcance o outro lado (o primeiro da fila de quem mais quer)
     let par = null, p1 = null;
     if (j.spots.length > 1) for (const o of parceiros.slice(0, 3)) {
       const ot = blocoDe(o.x, o.y);
       if (!new Set(areaDoAgente(o, ot)).has(j.spots[1].tile)) continue;
-      const c = caminho(ot, j.spots[1].tile);
+      const c = caminho(ot, j.spots[1].tile, o);
       if (c) { par = o; p1 = c; break; }
     }
     if (!par && j.tipo === 'pebolim') continue;
@@ -779,8 +804,10 @@ function agoraRelogio() {
 }
 const hojeChave = () => new Date(Date.now() - (state.clockSkew || 0)).toLocaleDateString('sv');
 const dentro = (f, r) => !!f && f.dias.has(r.dia) && r.min >= f.de && r.min < f.ate;
-function periodo() {
-  const c = state.relogioCfg;
+// relógio de uma ala (ou do andar, para sala comum e para quem não tem ala)
+const relogioDe = (ala) => (ala && state.relogioAla && state.relogioAla.get(ala)) || state.relogioCfg;
+const periodoDe = (e) => periodo(relogioDe(state.alaDe && state.alaDe.get(e.agent.id)));
+function periodo(c = state.relogioCfg) {
   if (!c) return 'trabalho';
   const r = agoraRelogio();
   if (!dentro(c.exp, r)) return 'noite';
@@ -789,8 +816,7 @@ function periodo() {
   return 'trabalho';
 }
 // a luz vai baixando meia hora depois do fim do expediente e volta meia hora antes do início
-function escuridao() {
-  const c = state.relogioCfg;
+function escuridao(c = state.relogioCfg) {
   if (!c) return 0;
   const r = agoraRelogio(), MAX = 0.55;
   if (!c.exp.dias.has(r.dia)) return MAX;
@@ -805,7 +831,8 @@ function saidaDe(e) {
   if (!lista.length) return nav.saida;
   const ala = state.alaDe && state.alaDe.get(e.agent.id), alvo = e.seat && e.seat.entrada >= 0 ? nav.comp[e.seat.entrada] : null;
   const ok = (x) => alvo == null || x.comp === alvo;
-  const m = lista.find((x) => ala && x.wing === ala && ok(x)) || lista.find((x) => x.comum && ok(x)) || lista.find(ok);
+  const salas = state.layout.rooms, daAla = (x) => ala ? state.salaDaAla(salas.find((r) => r.id === x.room), ala) : x.comum;
+  const m = lista.find((x) => ala && x.wing === ala && ok(x)) || lista.find((x) => x.comum && daAla(x) && ok(x)) || lista.find(ok);
   return m ? m.tile : nav.saida;
 }
 function irEmbora(e, motivo = 'casa', volta = 0) {
@@ -813,7 +840,7 @@ function irEmbora(e, motivo = 'casa', volta = 0) {
   e.fora = motivo; e.voltaEm = volta;
   if (e.mode === 'seated' && !naMesa(e.agent)) levantar(e);
   const sai = saidaDe(e);
-  const p = !naMesa(e.agent) && sai >= 0 && e.mode !== 'seated' ? caminho(blocoDe(e.x, e.y), sai) : null;
+  const p = !naMesa(e.agent) && sai >= 0 && e.mode !== 'seated' ? caminho(blocoDe(e.x, e.y), sai, e) : null;
   if (p && p.length) { e.path = p; e.mode = 'walk'; e.poi = false; e.indo = true; e.atv = { tipo: 'embora' }; }
   else { e.mode = 'sumindo'; e.path = []; }
 }
@@ -821,7 +848,7 @@ function irEmbora(e, motivo = 'casa', volta = 0) {
 function chegar(e) {
   e.fora = null; e.voltaEm = 0; e.alfa = 0;
   const sai = saidaDe(e);
-  const p = !naMesa(e.agent) && sai >= 0 && e.seat.entrada >= 0 ? caminho(sai, e.seat.entrada) : null;
+  const p = !naMesa(e.agent) && sai >= 0 && e.seat.entrada >= 0 ? caminho(sai, e.seat.entrada, e) : null;
   if (p && p.length) { Object.assign(e, centroBloco(sai)); e.path = p; e.mode = 'voltar'; }
   else sentar(e);
 }
@@ -841,7 +868,7 @@ function comecarRefeicao(e, tipo) {
   const vizinhos = (t) => (state.slots.has('m:' + (t - 1)) ? 1 : 0) + (state.slots.has('m:' + (t + 1)) ? 1 : 0);
   const livres = lugares.filter((l) => area.has(l.tile) && !state.slots.has('m:' + l.tile)).map((l) => [vizinhos(l.tile) + Math.random() * 0.9, l]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
   for (const l of livres) {
-    const p = caminho(aqui, l.tile);
+    const p = caminho(aqui, l.tile, e);
     if (!p) continue;
     state.slots.set('m:' + l.tile, e.id);
     e.atv = { tipo, key: 'm:' + l.tile, facing: l.facing };
@@ -919,7 +946,10 @@ function desenhaTerreno() {
   }
 }
 function desenhaNoite() {
-  const k = escuridao();
+  const rooms = state.layout.rooms;
+  // com alas, cada sala escurece pelo relógio da sua ala (sala comum: o do andar)
+  const kSala = state.relogioAla && state.relogioAla.size ? rooms.map((r) => escuridao(relogioDe(r.common ? null : r.wing))) : null;
+  const k = kSala ? Math.max(...kSala) : escuridao();
   if (k <= 0) return;
   const { W, H } = state.layout;
   let c = state.noiteCanvas;
@@ -927,9 +957,12 @@ function desenhaNoite() {
   const n = c.getContext('2d');
   n.globalCompositeOperation = 'source-over';
   n.clearRect(0, 0, c.width, c.height);
-  n.fillStyle = `rgba(10,16,38,${k.toFixed(3)})`;
-  if (state.terreno) for (const r of state.layout.rooms) n.fillRect(r.x * T, r.y * T, r.w * T, r.h * T); // o terreno escurece à parte
-  else n.fillRect(0, 0, c.width, c.height);
+  if (kSala) rooms.forEach((r, i) => { if (kSala[i] > 0) { n.fillStyle = `rgba(10,16,38,${kSala[i].toFixed(3)})`; n.fillRect(r.x * T, r.y * T, r.w * T, r.h * T); } });
+  else {
+    n.fillStyle = `rgba(10,16,38,${k.toFixed(3)})`;
+    if (state.terreno) for (const r of rooms) n.fillRect(r.x * T, r.y * T, r.w * T, r.h * T); // o terreno escurece à parte
+    else n.fillRect(0, 0, c.width, c.height);
+  }
   n.globalCompositeOperation = 'destination-out';
   const luzes = [];
   for (const e of state.ents.values()) {
@@ -1007,8 +1040,8 @@ function atualizar(dt) {
     switch (e.mode) {
       case 'casa': {
         if (ativo) { chamar(e); break; }
-        if (e.fora === 'casa' && state.periodo !== 'noite' && !e.voltaEm) e.voltaEm = Date.now() + rnd(0, 20 * 60000) / PRESSA;
-        if (e.fora === 'almoco' && state.periodo === 'noite') { e.fora = 'casa'; e.voltaEm = 0; }
+        if (e.fora === 'casa' && periodoDe(e) !== 'noite' && !e.voltaEm) e.voltaEm = Date.now() + rnd(0, 20 * 60000) / PRESSA;
+        if (e.fora === 'almoco' && periodoDe(e) === 'noite') { e.fora = 'casa'; e.voltaEm = 0; }
         if (e.voltaEm && Date.now() >= e.voltaEm) chegar(e);
         break;
       }
@@ -1024,10 +1057,10 @@ function atualizar(dt) {
       case 'chegando':
         // chegando para trabalhar: entra pela saída e vai direto para a mesa
         if (ativo) { chamar(e); break; }
-        if (andar(e, dt, VEL.walk * 1.1)) { const p = e.seat.entrada >= 0 ? caminho(blocoDe(e.x, e.y), e.seat.entrada) : null; if (p && p.length) { e.path = p; e.mode = 'voltar'; } else sentar(e); }
+        if (andar(e, dt, VEL.walk * 1.1)) { const p = e.seat.entrada >= 0 ? caminho(blocoDe(e.x, e.y), e.seat.entrada, e) : null; if (p && p.length) { e.path = p; e.mode = 'voltar'; } else sentar(e); }
         break;
       case 'seated':
-        if (!ativo && naMesa(e.agent) && !e.agent.central && state.periodo === 'noite') { irEmbora(e); break; }
+        if (!ativo && naMesa(e.agent) && !e.agent.central && periodoDe(e) === 'noite') { irEmbora(e); break; }
         if (!ativo && !naMesa(e.agent) && !(e.disfarce > Date.now())) { e.timer -= dt; if (e.timer <= 0) levantar(e); }
         break;
       case 'pause':
@@ -1143,7 +1176,8 @@ function lugaresDeVisita() {
 // o próximo paciente presencial já fica esperando na sala de espera, mesmo que falte mais de 15 min
 // (só com o escritório aberto: fora do expediente ele chega 15 min antes, como os outros)
 function proximaVisita(agora) {
-  if (state.periodo === 'noite') return null;
+  const espera = state.layout && state.layout.rooms.find((r) => r.kind === 'waiting');
+  if (periodo(relogioDe(espera && espera.wing)) === 'noite') return null;
   let prox = null;
   for (const v of state.visits) if (!v.online && v.inicio > agora && (!prox || v.inicio < prox.inicio)) prox = v;
   return prox;
@@ -1160,7 +1194,7 @@ function buscarPaciente(e) {
   const cands = [[base + 1, 'left'], [base - 1, 'right'], [base + W, 'up'], [base - W, 'down'], [base, 'up']]
     .filter(([i]) => i >= 0 && i < W * H && walk[i] && Math.abs((i % W) - (base % W)) <= 1);
   for (const [i, olhar] of cands) {
-    const p = caminho(aqui, i);
+    const p = caminho(aqui, i, e);
     if (!p) continue;
     if (e.mode === 'seated') Object.assign(e, centroBloco(aqui));
     b.olhar = olhar;
@@ -1379,7 +1413,7 @@ function desenhaAgente(e, heads) {
     topo = y + bob;
     if (st === 'waiting') maoLevantada(x, y + bob, e.look);
     // almoço na mesa (quem não sai dela)
-    if (state.periodo === 'almoco' && !ATIVO.has(st) && naMesa(e.agent) && !e.agent.central) { pinta(x + 4, y + bob + 1, 8, 2, '#f7f3ea'); pinta(x + 6, y + bob, 4, 1, '#d98f3f'); if (Math.floor(Date.now() / 6000) % 3 === 0) balao(x + 8, y + bob, '🍱'); }
+    if (periodoDe(e) === 'almoco' && !ATIVO.has(st) && naMesa(e.agent) && !e.agent.central) { pinta(x + 4, y + bob + 1, 8, 2, '#f7f3ea'); pinta(x + 6, y + bob, 4, 1, '#d98f3f'); if (Math.floor(Date.now() / 6000) % 3 === 0) balao(x + 8, y + bob, '🍱'); }
     if (e.reacao && e.reacao.ate > Date.now()) balao(x + 8, y + bob, e.reacao.emoji);
     if (e.preocupado > Date.now()) suor(x, y + bob);
   } else {

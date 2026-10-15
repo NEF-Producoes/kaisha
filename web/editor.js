@@ -178,7 +178,7 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
             campo('Piso', escolha(r.floor, PISOS.map((p) => [p, p.replace('_', ' ')]), (v) => { r.floor = v; mudou(); })),
             campo('Parede', escolha(r.wall || 'clara', PAREDES.map((p) => [p, p]), (v) => { r.wall = v; mudou(); }))),
           el('div', { class: 'ed-row four' }, campo('Coluna', area(0)), campo('Linha', area(1)), campo('Largura', area(2)), campo('Altura', area(3))),
-          (o.wings && o.wings.length ? campo('Ala', escolha(r.common ? '__comum' : r.wing || '', [['', '—'], ['__comum', 'Comum (todas as alas)'], ...o.wings.map((w) => [w.id, w.name])], (v) => { r.common = v === '__comum'; r.wing = v && v !== '__comum' ? v : null; mudou(); })) : ''),
+          (o.wings && o.wings.length ? campo('Ala', escolha(Array.isArray(r.common) ? '__parcial' : r.common ? '__comum' : r.wing || '', [['', '—'], ['__comum', 'Comum (todas as alas)'], ...(Array.isArray(r.common) ? [['__parcial', 'Comum (' + r.common.join(', ') + ')']] : []), ...o.wings.map((w) => [w.id, w.name])], (v) => { if (v === '__parcial') return; r.common = v === '__comum'; r.wing = v && v !== '__comum' ? v : null; mudou(); })) : ''),
           marca(r.kind === 'waiting', 'Sala de espera (visitas aguardam aqui)', (v) => { r.kind = v ? 'waiting' : null; mudou(); }),
           el('button', { class: 'btn danger', type: 'button', disabled: o.rooms.length <= 1, onclick: (e) => { e.stopPropagation(); o.rooms.splice(i, 1); sel = null; mudou(); render(); } }, 'Remover sala')));
       });
