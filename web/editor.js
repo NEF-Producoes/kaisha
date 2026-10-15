@@ -108,6 +108,20 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
         campo('Planta', escolha(o.plan, [['open', 'Aberta (um salão com divisórias)'], ['rooms', 'Salas separadas']], (v) => { o.plan = v; mudou(); })),
         el('p', { class: 'ed-help' }, 'Mesas e móveis se movem arrastando no mapa. Salas: aba Salas.'),
       );
+      // alas: partes do andar com equipe própria (ex.: uma empresa, uma clínica); cada sala escolhe a sua na aba Salas
+      o.wings = o.wings || [];
+      let nomeAla = '';
+      const addAla = () => {
+        const id = slug(nomeAla);
+        if (!id || o.wings.some((w) => w.id === id)) return aviso(id ? 'já existe uma ala com esse nome' : 'dê um nome para a ala', 'erro');
+        o.wings.push({ id, name: nomeAla.trim(), hours: null, lunch: null, happy_hour: null }); mudou(); render();
+      };
+      out.push(el('fieldset', { class: 'ed-card' }, el('legend', {}, 'Alas'),
+        el('p', { class: 'ed-help' }, 'Partes do andar com equipe própria, como uma empresa ou uma clínica. Cada sala escolhe a sua ala (ou "comum") na aba Salas.'),
+        ...o.wings.map((w, i) => el('div', { class: 'ed-row' },
+          campo('Nome', texto(w.name, (v) => { w.name = v; mudou(); })),
+          el('button', { class: 'btn danger', type: 'button', onclick: () => { for (const r of o.rooms) if (r.wing === w.id) r.wing = null; o.wings.splice(i, 1); mudou(); render(); } }, 'Remover'))),
+        el('div', { class: 'ed-row' }, campo('Nova ala', texto('', (v) => { nomeAla = v; }, { placeholder: 'ex.: NEF' })), el('button', { class: 'btn', type: 'button', onclick: addAla }, '+ Ala'))));
       if (geral) {
         // novo andar: um escritório separado, com agentes, placar e chave próprios
         let nomeAndar = '';
@@ -164,6 +178,7 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
             campo('Piso', escolha(r.floor, PISOS.map((p) => [p, p.replace('_', ' ')]), (v) => { r.floor = v; mudou(); })),
             campo('Parede', escolha(r.wall || 'clara', PAREDES.map((p) => [p, p]), (v) => { r.wall = v; mudou(); }))),
           el('div', { class: 'ed-row four' }, campo('Coluna', area(0)), campo('Linha', area(1)), campo('Largura', area(2)), campo('Altura', area(3))),
+          (o.wings && o.wings.length ? campo('Ala', escolha(r.common ? '__comum' : r.wing || '', [['', '—'], ['__comum', 'Comum (todas as alas)'], ...o.wings.map((w) => [w.id, w.name])], (v) => { r.common = v === '__comum'; r.wing = v && v !== '__comum' ? v : null; mudou(); })) : ''),
           marca(r.kind === 'waiting', 'Sala de espera (visitas aguardam aqui)', (v) => { r.kind = v ? 'waiting' : null; mudou(); }),
           el('button', { class: 'btn danger', type: 'button', disabled: o.rooms.length <= 1, onclick: (e) => { e.stopPropagation(); o.rooms.splice(i, 1); sel = null; mudou(); render(); } }, 'Remover sala')));
       });

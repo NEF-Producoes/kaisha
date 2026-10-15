@@ -85,6 +85,15 @@ function buildLayout() {
     W = Math.max(W, w); H += 6;
   }
   state.layout = { rooms, desks, W, H };
+  // alas: cada agente pertence à ala da sala onde fica a mesa dele (ou da sala declarada); salas comuns não têm ala
+  state.alas = office.wings || [];
+  state.alaDe = new Map();
+  const salaNo = (x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+  for (const d of desks) {
+    const r = salaNo(d.x, d.y) || rooms.find((q) => q.id === d.agent.room);
+    d.wing = r && !r.common ? r.wing || null : null;
+    state.alaDe.set(d.agent.id, d.wing);
+  }
   // formato da tela: auto (padrão: o terreno em volta do prédio acompanha a proporção da tela),
   // uma proporção fixa ("16:9", "21:9"…) ou livre (só o prédio, sem terreno)
   const fmt = String(office.aspect ?? 'auto').trim().toLowerCase();

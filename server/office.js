@@ -17,7 +17,7 @@ const ALIAS = {
   de: 'from', ate: 'to', até: 'to', enfeites: 'decorations', ponto: 'at', efeito: 'effect', desenhos: 'sprites',
   paleta: 'palette', pixels: 'pixels', cabelo: 'hair', pele: 'skin', roupa: 'shirt', idioma: 'lang', titulo: 'title', título: 'title',
   movel: 'movable', ordem: 'order', fica_na_sala: 'stay', fica_na_mesa: 'fixed', na_mesa: 'fixed', penteado: 'hairstyle', cabelo_estilo: 'hairstyle', na_sala: 'stay', stay_in_room: 'stay', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
-  expediente: 'hours', horario: 'hours', horário: 'hours', almoco: 'lunch', almoço: 'lunch', relogio: 'clock', relógio: 'clock', formato: 'aspect', proporcao: 'aspect', proporção: 'aspect', monitores: 'monitors',
+  expediente: 'hours', horario: 'hours', horário: 'hours', almoco: 'lunch', almoço: 'lunch', relogio: 'clock', relógio: 'clock', formato: 'aspect', proporcao: 'aspect', proporção: 'aspect', monitores: 'monitors', alas: 'wings', ala: 'wing', comum: 'common',
 };
 const norm = (v) => {
   if (Array.isArray(v)) return v.map(norm);
@@ -45,6 +45,14 @@ export function validateOffice(raw) {
     if (!Array.isArray(r.area) || r.area.length !== 4 || !r.area.every(isNum)) erros.push(`sala "${r.id || i + 1}": area deve ser [coluna, linha, largura, altura]`);
     else if (r.area[2] < 3 || r.area[3] < 4) erros.push(`sala "${r.id}": mínimo 3 de largura e 4 de altura`);
   });
+  // alas: partes do mesmo andar com equipe própria (ex.: NEF, Musashi, clínica); cada sala diz a sua (ala) ou é comum
+  const wings = (Array.isArray(o.wings) ? o.wings : []).map((w) => (w && typeof w === 'object' ? w : { id: w })).filter((w) => w.id != null && String(w.id).trim());
+  const wingIds = new Set();
+  wings.forEach((w) => { const id = String(w.id).trim(); if (wingIds.has(id)) erros.push(`ala "${id}" repetida`); wingIds.add(id); });
+  rooms.forEach((r) => {
+    if (r.wing != null && r.wing !== '' && !wingIds.has(String(r.wing))) erros.push(`sala "${r.id}": ala "${r.wing}" não existe (declare em alas)`);
+    if (r.wing && (r.common === true || r.common === 'sim')) erros.push(`sala "${r.id}": use ala ou comum, não os dois`);
+  });
   const agents = Array.isArray(o.agents) ? o.agents : [];
   const agentIds = new Set();
   agents.forEach((a, i) => {
@@ -69,8 +77,16 @@ export function validateOffice(raw) {
       // planta aberta: um salão só, salas separadas por divisórias com passagens
       order: isNum(Number(o.order)) && o.order !== null && o.order !== '' ? Number(o.order) : null, // posição na lista de andares
       plan: ['aberta', 'aberto', 'open', 'integrada'].includes(String(o.plan || '').toLowerCase()) ? 'open' : 'rooms',
+      wings: wings.map((w) => ({
+        id: String(w.id).trim(), name: String(w.name ?? w.id),
+        // horários próprios da ala (vazios = os do andar)
+        hours: w.hours != null && w.hours !== '' ? String(w.hours) : null,
+        lunch: w.lunch != null && w.lunch !== '' ? String(w.lunch) : null,
+        happy_hour: w.happy_hour != null && w.happy_hour !== '' ? String(w.happy_hour) : null,
+      })),
       rooms: rooms.map((r) => ({
         id: String(r.id), name: String(r.name ?? r.id), area: r.area, floor: r.floor || 'madeira', wall: r.wall || 'clara',
+        wing: r.wing != null && r.wing !== '' ? String(r.wing) : null, common: r.common === true || r.common === 'sim',
         // sala de espera: onde as visitas (pacientes, clientes) aguardam até a hora marcada
         kind: ['espera', 'waiting', 'sala_de_espera', 'recepcao_espera'].includes(String(r.type ?? r.kind ?? '').toLowerCase()) ? 'waiting' : null,
       })),
@@ -272,14 +288,15 @@ export function toYaml(o) {
     planta: o.plan === 'open' ? 'aberta' : null,
     calendario: o.calendar && o.calendar !== 'br' ? o.calendar : null,
     idioma: o.lang,
-    salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null })),
+    alas: o.wings && o.wings.length ? o.wings.map((w) => limpa({ id: w.id, nome: w.name !== w.id ? w.name : null, expediente: w.hours, almoco: w.lunch, happy_hour: w.happy_hour })) : null,
+    salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null, ala: r.wing || null, comum: r.common || null })),
     agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null, fica_na_sala: a.stay || null, fica_na_mesa: a.fixed || null, penteado: a.hairstyle === 'long' ? 'longo' : a.hairstyle === 'short' ? 'curto' : null, monitores: a.monitors || null })),
     moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
     expediente: o.hours, almoco: o.lunch, happy_hour: o.happy_hour, relogio: o.clock === false ? 'não' : null, formato: o.aspect || null,
     datas_especiais: o.special_days && o.special_days.length ? o.special_days.map((d) => limpa({ data: d.date, nome: d.name, tema: d.theme, mensagem: d.message })) : null,
   });
   const doc = new YAML.Document(dados);
-  for (const k of ['salas', 'agentes', 'moveis', 'datas_especiais']) {
+  for (const k of ['alas', 'salas', 'agentes', 'moveis', 'datas_especiais']) {
     const seq = doc.get(k, true);
     if (seq && seq.items) for (const it of seq.items) it.flow = true;
   }

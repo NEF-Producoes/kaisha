@@ -1,6 +1,6 @@
 {
   "name": "kaisha",
-  "version": "0.14.2",
+  "version": "0.14.3",
   "description": "Um escritório em pixel art que mostra seus agentes de IA trabalhando, ao vivo. Self-hosted, um container, fácil no EasyPanel.",
   "license": "MIT",
   "type": "module",
