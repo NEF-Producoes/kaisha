@@ -242,8 +242,10 @@ function buildStatic() {
   const aberta = state.layout_plan === 'open';
   const c = document.createElement('canvas'); c.width = W * T; c.height = H * T;
   const s = c.getContext('2d');
-  s.fillStyle = '#1b1f27'; s.fillRect(0, 0, c.width, c.height);
-  state.terreno = state.view.fora ? desenharTerreno(state.view, W * T, H * T, hashStr(state.snap.office.name || 'k')) : null;
+  // com terreno, os cantos vazios da planta ficam transparentes e mostram a grama; sem terreno, fundo escuro
+  const ocupado = (tx, ty) => rooms.some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h);
+  state.terreno = state.view.fora ? desenharTerreno(state.view, W * T, H * T, hashStr(state.snap.office.name || 'k'), ocupado) : null;
+  if (!state.terreno) { s.fillStyle = '#1b1f27'; s.fillRect(0, 0, c.width, c.height); }
   const tint = state.snap.theme && state.snap.theme.floorTint;
   for (const r of rooms) {
     const topo = temParede(r) ? 2 : 0;
@@ -865,7 +867,9 @@ function desenhaNoite() {
   const n = c.getContext('2d');
   n.globalCompositeOperation = 'source-over';
   n.clearRect(0, 0, c.width, c.height);
-  n.fillStyle = `rgba(10,16,38,${k.toFixed(3)})`; n.fillRect(0, 0, c.width, c.height);
+  n.fillStyle = `rgba(10,16,38,${k.toFixed(3)})`;
+  if (state.terreno) for (const r of state.layout.rooms) n.fillRect(r.x * T, r.y * T, r.w * T, r.h * T); // o terreno escurece à parte
+  else n.fillRect(0, 0, c.width, c.height);
   n.globalCompositeOperation = 'destination-out';
   const luzes = [];
   for (const e of state.ents.values()) {

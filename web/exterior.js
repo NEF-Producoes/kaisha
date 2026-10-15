@@ -57,52 +57,75 @@ function poste(g, x, y) {
   px(g, '#2f2c45', x - 3, y - 25, 7, 3); px(g, '#ffe7a8', x - 2, y - 23, 5, 1);
 }
 
-// desenha o terreno inteiro (VW × VH) com o espaço do prédio em (OX, OY, bw, bh)
-export function desenharTerreno(v, bw, bh, semente = 1) {
+// desenha o terreno inteiro (VW × VH) com o prédio em (OX, OY); ocupado(tx, ty) diz se o bloco é de alguma sala,
+// para a calçada e a grama seguirem o contorno real da planta (em L, em T…)
+export function desenharTerreno(v, bw, bh, semente = 1, ocupado = () => true) {
   const { VW, VH, OX, OY } = v;
   const c = document.createElement('canvas'); c.width = VW; c.height = VH;
   const g = c.getContext('2d');
   // grama
   const gr = ['#4f7d43', '#5a8a4a', '#679852', '#78a85c'];
   for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
-    const n = sorte(x * 73856093 ^ y * 19349663 ^ semente) ;
+    const n = sorte(x * 73856093 ^ y * 19349663 ^ semente);
     px(g, gr[n < 0.12 ? 0 : n < 0.62 ? 1 : n < 0.93 ? 2 : 3], x, y);
   }
-  // tufos
   for (let k = 0; k < (VW * VH) / 180; k++) {
     const x = Math.floor(sorte(k * 7 + semente) * VW), y = Math.floor(sorte(k * 13 + 5 + semente) * VH);
     px(g, '#3f6a3a', x, y + 1, 3, 1); px(g, '#86b866', x + 1, y, 1, 1);
   }
-  // calçada em volta do prédio (meio bloco), com juntas
-  const cal = 8, cx0 = OX - cal, cy0 = OY - cal, cw = bw + cal * 2, ch = bh + cal * 2;
+  // máscara do prédio (pixel a pixel) e faixas em volta dele
+  const dentro = new Uint8Array(VW * VH);
+  for (let ty = 0; ty * T < bh; ty++) for (let tx = 0; tx * T < bw; tx++) {
+    if (!ocupado(tx, ty)) continue;
+    for (let y = OY + ty * T; y < OY + (ty + 1) * T; y++) dentro.fill(1, y * VW + OX + tx * T, y * VW + OX + (tx + 1) * T);
+  }
+  const dilata = (m, r) => {
+    const h = new Uint8Array(VW * VH), o = new Uint8Array(VW * VH);
+    for (let y = 0; y < VH; y++) { let ult = -1e9; for (let x = 0; x < VW; x++) { if (m[y * VW + x]) ult = x; if (x - ult <= r) h[y * VW + x] = 1; } ult = 1e9; for (let x = VW - 1; x >= 0; x--) { if (m[y * VW + x]) ult = x; if (ult - x <= r) h[y * VW + x] = 1; } }
+    for (let x = 0; x < VW; x++) { let ult = -1e9; for (let y = 0; y < VH; y++) { if (h[y * VW + x]) ult = y; if (y - ult <= r) o[y * VW + x] = 1; } ult = 1e9; for (let y = VH - 1; y >= 0; y--) { if (h[y * VW + x]) ult = y; if (ult - y <= r) o[y * VW + x] = 1; } }
+    return o;
+  };
+  const cal = 8;
+  const calcada = dilata(dentro, cal);
+  // calçada (meio bloco em volta das salas), com juntas e borda
   const tc = tons('#bdb7ae');
-  px(g, '#bdb7ae', cx0, cy0, cw, ch);
-  for (let x = cx0; x < cx0 + cw; x += 16) { px(g, tc.sh, x, cy0, 1, ch); }
-  for (let y = cy0; y < cy0 + ch; y += 16) { px(g, tc.sh, cx0, y, cw, 1); }
-  px(g, tc.hi, cx0, cy0, cw, 1); px(g, tc.hi, cx0, cy0, 1, ch);
-  px(g, tc.dk, cx0, cy0 + ch - 1, cw, 1); px(g, tc.dk, cx0 + cw - 1, cy0, 1, ch);
-  // sombra do prédio na calçada (luz de cima à esquerda)
-  g.fillStyle = 'rgba(30,20,40,0.35)'; g.fillRect(OX + 4, OY + bh, bw, 4); g.fillRect(OX + bw, OY + 4, 4, bh - 4);
-  // postes nos cantos da calçada
+  const ehCal = (x, y) => x >= 0 && y >= 0 && x < VW && y < VH && calcada[y * VW + x] && !dentro[y * VW + x];
+  const ehPredio = (x, y) => x >= 0 && y >= 0 && x < VW && y < VH && dentro[y * VW + x];
+  for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+    if (!ehCal(x, y)) continue;
+    const grama = (a, b) => !ehCal(a, b) && !ehPredio(a, b);
+    let cor = '#bdb7ae';
+    if ((x - OX + cal) % 16 === 0 || (y - OY + cal) % 16 === 0) cor = tc.sh;
+    if (grama(x - 1, y) || grama(x, y - 1)) cor = tc.hi;
+    if (grama(x + 1, y) || grama(x, y + 1)) cor = tc.dk;
+    px(g, cor, x, y);
+  }
+  // sombra do prédio no chão (luz de cima à esquerda)
+  g.fillStyle = 'rgba(30,20,40,0.35)';
+  for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) if (!ehPredio(x, y) && (ehPredio(x - 4, y - 4) || ehPredio(x - 2, y - 2))) g.fillRect(x, y, 1, 1);
+  // postes nos cantos de fora da calçada
+  const cx0 = OX - cal, cy0 = OY - cal, cw = bw + cal * 2, ch = bh + cal * 2;
   const postes = [[cx0 - 4, cy0 + ch + 2], [cx0 + cw + 4, cy0 + ch + 2], [cx0 - 4, cy0 + 26], [cx0 + cw + 4, cy0 + 26]]
     .filter(([x, y]) => x > 4 && x < VW - 4 && y > 26 && y < VH - 2);
-  // árvores, arbustos e flores fora da calçada, sem encostar umas nas outras
-  const livre = (x, y, m) => (x < cx0 - m || x > cx0 + cw + m || y < cy0 - m || y > cy0 + ch + m) && x > 6 && x < VW - 6 && y > 4 && y < VH - 2;
+  // árvores, arbustos e flores fora da calçada (inclusive nos cantos vazios da planta), sem encostar umas nas outras
+  const zonas = { 14: dilata(dentro, cal + 14), 8: dilata(dentro, cal + 8), 2: dilata(dentro, cal + 2) };
+  const livre = (x, y, m) => x > 6 && x < VW - 6 && y > 4 && y < VH - 2 && !zonas[m][y * VW + x];
+  let areaLivre = 0; for (let i = 0; i < VW * VH; i++) if (!zonas[14][i]) areaLivre++;
   const coisas = [];
   const longe = (x, y, d) => coisas.every(([a, b]) => Math.hypot(a - x, b - y) > d) && postes.every(([a, b]) => Math.hypot(a - x, b - y) > 14);
-  const nArv = Math.round((VW * VH - cw * ch) / 2600);
-  for (let k = 0, tent = 0; k < nArv && tent < 400; tent++) {
+  const nArv = Math.round(areaLivre / 1400);
+  for (let k = 0, tent = 0; k < nArv && tent < 600; tent++) {
     const x = Math.floor(sorte(tent * 101 + semente * 7) * VW), y = Math.floor(sorte(tent * 211 + 3 + semente) * VH);
     if (!livre(x, y, 14) || y < 30 || !longe(x, y, 26)) continue;
     coisas.push([x, y, 'arvore', sorte(tent * 17)]); k++;
   }
   const nArb = Math.round(nArv * 0.5) + 1;
-  for (let k = 0, tent = 0; k < nArb && tent < 400; tent++) {
+  for (let k = 0, tent = 0; k < nArb && tent < 600; tent++) {
     const x = Math.floor(sorte(tent * 307 + 11 + semente) * VW), y = Math.floor(sorte(tent * 401 + 13 + semente) * VH);
     if (!livre(x, y, 8) || y < 8 || !longe(x, y, 16)) continue;
     coisas.push([x, y, 'arbusto', sorte(tent * 19 + 1)]); k++;
   }
-  for (let k = 0; k < (VW * VH - cw * ch) / 400; k++) {
+  for (let k = 0; k < areaLivre / 300; k++) {
     const x = Math.floor(sorte(k * 53 + 7 + semente) * VW), y = Math.floor(sorte(k * 59 + 9 + semente) * VH);
     if (livre(x, y, 2)) { px(g, ['#f2c14e', '#e26fa6', '#ffffff', '#c9a0ff'][k % 4], x, y); px(g, '#3f6a3a', x, y + 1); }
   }
