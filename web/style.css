@@ -45,7 +45,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .plate[data-status="waiting"] .plate-name::before { color: var(--waiting); }
 .plate[data-status="error"] .plate-name::before { color: var(--error); }
 .plate[data-status="offline"] .plate-name::before { color: var(--offline); }
-.plate-role { color: var(--muted); font-weight: 400; white-space: nowrap; }
+.plate-role { color: var(--muted); font-weight: 400; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .plate[data-fora="casa"], .plate[data-fora="almoco"] { opacity: .55; }
 .plate[data-fora="casa"] .plate-status::after { content: " · 🏠"; }
 .plate[data-fora="almoco"] .plate-status::after { content: " · 🍽️"; }
@@ -87,7 +87,8 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 @media (max-width: 640px) { .stage { padding: 8px; } .right #theme { display: none; } }
 /* agente andando: placa enxuta, só nome e status */
 .plate.walking { min-width: 0; padding: 0 calc(2px * var(--s)); background: rgb(22 25 31 / .78); }
-.plate.walking .plate-role { display: none; }
+/* o cargo fica sempre visível abaixo do nome, inclusive andando, em casa ou no almoço */
+.plate-role:empty { display: none; }
 .plate.walking[data-status="idle"] .plate-status, .plate.walking[data-status="offline"] .plate-status { display: none; }
 /* nome de sala que não tem parede (planta aberta): pintado no chão */
 .room-name.on-floor { background: rgb(42 46 55 / .55); box-shadow: none; }
