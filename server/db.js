@@ -87,6 +87,7 @@ export function openDb(dataDir, { mainFloor = 'principal' } = {}) {
   `);
   const insertEvent = db.prepare('INSERT INTO events (floor, agent, status, task, queue, meta, at, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   const placar = db.prepare('SELECT outcome, COUNT(*) AS n FROM events WHERE floor = ? AND outcome IS NOT NULL AND at >= ? GROUP BY outcome');
+  const placarAgente = db.prepare('SELECT agent, outcome, COUNT(*) AS n FROM events WHERE floor = ? AND outcome IS NOT NULL AND at >= ? GROUP BY agent, outcome');
   const touch = db.prepare('UPDATE agents SET seen_at = ? WHERE floor = ? AND id = ?');
   const all = db.prepare('SELECT * FROM agents WHERE floor = ?');
   const one = db.prepare('SELECT * FROM agents WHERE floor = ? AND id = ?');
@@ -154,6 +155,9 @@ export function openDb(dataDir, { mainFloor = 'principal' } = {}) {
     score(floor, desde) {
       const out = { success: 0, question: 0, error: 0 };
       for (const r of placar.all(floor, desde)) if (r.outcome in out) out[r.outcome] = r.n;
+      // por agente, para o painel somar por ala (placar de cada quadro HOJE)
+      out.byAgent = {};
+      for (const r of placarAgente.all(floor, desde)) { if (!(r.outcome in out)) continue; const a = (out.byAgent[r.agent] ||= { success: 0, question: 0, error: 0 }); a[r.outcome] = r.n; }
       return out;
     },
     // leva o agente (estado e histórico) para outro andar, se lá ainda não existir

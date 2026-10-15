@@ -1767,11 +1767,15 @@ function buildOverlay() {
     overlay.append(hit, bubble, plate);
     nodes.set(d.agent.id, { plate, bubble, hit, agent: d.agent, pos: '' });
   }
-  const q = (state.snap.office.furniture || []).find((f) => furnitureKey(f.type) === 'quadro');
-  if (q) {
+  // um placar HOJE por quadro; com alas, cada quadro conta só a ala da sala onde está (ou a do campo ala do móvel)
+  const quadros = (state.snap.office.furniture || []).filter((f) => furnitureKey(f.type) === 'quadro');
+  for (const q of state.alas && state.alas.length ? quadros : quadros.slice(0, 1)) {
+    const sala = state.layout.rooms.find((r) => q.pos[0] >= r.x && q.pos[0] < r.x + r.w && q.pos[1] >= r.y && q.pos[1] < r.y + r.h);
+    const ala = q.wing || (sala && !sala.common ? sala.wing : null);
     const sb = el('div', 'scoreboard');
     sb.append(el('span', 'sb-t', L.today), el('span', 'sb-n'));
     sb.dataset.x = q.pos[0] * T + 16; sb.dataset.y = q.pos[1] * T + 4;
+    if (ala) sb.dataset.ala = ala;
     sb.classList.add('room-name');
     overlay.append(sb);
   }
@@ -1828,9 +1832,18 @@ function moverOverlay() {
 // placar do dia, pintado sobre o quadro da parede (ou no topo, se não houver quadro)
 function mostrarPlacar() {
   const sc = state.score;
-  const el2 = overlay.querySelector('.scoreboard');
-  const txt = sc ? [`✓ ${sc.success}`, `? ${sc.question}`, `⛈ ${sc.error}`] : null;
-  if (el2 && txt) { el2.querySelector('.sb-n').innerHTML = txt.map((t, i) => `<span data-k="${['success', 'question', 'error'][i]}">${t}</span>`).join(''); }
+  // soma do placar de uma ala: as tarefas dos agentes daquela ala
+  const daAla = (ala) => {
+    const t = { success: 0, question: 0, error: 0 };
+    for (const [id, v] of Object.entries((sc && sc.byAgent) || {})) if (state.alaDe && state.alaDe.get(id) === ala) for (const k in t) t[k] += v[k] || 0;
+    return t;
+  };
+  for (const el2 of overlay.querySelectorAll('.scoreboard')) {
+    const v = !sc ? null : el2.dataset.ala ? daAla(el2.dataset.ala) : sc;
+    if (!v) continue;
+    const txt = [`✓ ${v.success}`, `? ${v.question}`, `⛈ ${v.error}`];
+    el2.querySelector('.sb-n').innerHTML = txt.map((t, i) => `<span data-k="${['success', 'question', 'error'][i]}">${t}</span>`).join('');
+  }
   $('#score').textContent = sc ? `hoje ${sc.success} ✓ · ${sc.question} ? · ${sc.error} ⛈` : '';
 }
 function refreshOverlay() {

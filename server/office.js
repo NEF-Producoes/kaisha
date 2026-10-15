@@ -112,7 +112,8 @@ export function validateOffice(raw) {
         monitors: [1, 2, 3].includes(Number(a.monitors)) ? Number(a.monitors) : null,
         hairstyle: ({ longo: 'long', long: 'long', comprido: 'long', curto: 'short', short: 'short' })[String(a.hairstyle || '').toLowerCase()] || null,
       })),
-      furniture: furniture.map((f) => ({ type: String(f.type), pos: f.pos, room: f.room ? String(f.room) : null, flip: !!f.flip })),
+      // ala: só para o quadro HOJE (conta as tarefas daquela ala); sem o campo, vale a ala da sala onde ele está
+      furniture: furniture.map((f) => ({ type: String(f.type), pos: f.pos, room: f.room ? String(f.room) : null, flip: !!f.flip, wing: f.wing != null && f.wing !== '' ? String(f.wing) : null })),
       passages,
       entrances: entrances.filter((e) => roomIds.has(String(e.room ?? '')) && LADOS[String(e.side ?? '').toLowerCase()]).map((e) => ({ room: String(e.room), side: LADOS[String(e.side).toLowerCase()] })),
       // vida pelo relógio: expediente (fora dele todo mundo vai para casa e a luz apaga), almoço e happy hour
@@ -304,7 +305,7 @@ export function toYaml(o) {
     alas: o.wings && o.wings.length ? o.wings.map((w) => limpa({ id: w.id, nome: w.name !== w.id ? w.name : null, expediente: w.hours, almoco: w.lunch, happy_hour: w.happy_hour })) : null,
     salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null, ala: r.wing || null, comum: Array.isArray(r.common) ? r.common : r.common || null })),
     agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null, fica_na_sala: a.stay || null, fica_na_mesa: a.fixed || null, penteado: a.hairstyle === 'long' ? 'longo' : a.hairstyle === 'short' ? 'curto' : null, monitores: a.monitors || null })),
-    moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
+    moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null, ala: f.wing || null })),
     passagens: o.passages && o.passages.length ? o.passages : null,
     entradas: o.entrances && o.entrances.length ? o.entrances.map((e) => ({ sala: e.room, lado: { left: 'esquerda', right: 'direita', bottom: 'baixo', top: 'cima' }[e.side] })) : null,
     expediente: o.hours, almoco: o.lunch, happy_hour: o.happy_hour, relogio: o.clock === false ? 'não' : null, formato: o.aspect || null,
