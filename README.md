@@ -10,6 +10,7 @@ Cada agente tem uma mesa. Quando ele começa uma tarefa, o boneco digita, o moni
 - **Funciona com qualquer coisa** que faça uma chamada HTTP: n8n, scripts, cron, Claude Code, OpenClaw, seu backend.
 - **Escritório em um arquivo** (`office.yaml`): salas, mesas, móveis. Salvou, o painel muda na hora, sem recarregar a página.
 - **Decoração por data**: Natal, Festa Junina, Halloween e outras datas mudam o escritório sozinhas. Temas novos são uma pasta com um arquivo de texto.
+- **Pixel art com luz e sombra**: uma paleta só, contorno colorido, sombra no chão e a luz das janelas entrando de dia. Ao clicar num agente, aparece o retrato dele em card, com a inicial em neon. Tudo é gerado a partir das cores do agente, sem imagem externa.
 - **Leve**: Node.js 22, SQLite embutido, sem Redis, sem banco externo. Um volume para os dados.
 
 ## Subindo no EasyPanel

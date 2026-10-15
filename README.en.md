@@ -10,6 +10,7 @@ Every agent gets a desk. When it starts a task the character types, the monitor 
 - **Works with anything** that can make an HTTP call: n8n, scripts, cron, Claude Code, OpenClaw, your backend.
 - **The office is one file** (`office.yaml`): rooms, desks, furniture. Save it and every open browser redraws instantly.
 - **Seasonal decoration**: Christmas, Festa Junina, Halloween and other dates change the office on their own. A new theme is a folder with a text file.
+- **Pixel art with light and shadow**: one palette, colored outlines, floor shadows and daylight coming through the windows. Click an agent to see its portrait card with a neon initial, generated from the agent's own colors, no external images.
 - **Light**: Node.js 22, built-in SQLite, no Redis, no external database. One volume for data.
 
 ## Deploy on EasyPanel

@@ -62,6 +62,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .hit:focus-visible { outline: 2px solid #7fd1ff; }
 .errors { position: fixed; left: 16px; bottom: 16px; max-width: min(560px, calc(100% - 32px)); background: #3a1d1d; color: #ffd6d6; border: 1px solid #6b2a2a; padding: 10px 12px; border-radius: 6px; font-size: 13px; z-index: 5; }
 .panel { position: fixed; top: 0; right: 0; height: 100%; width: min(360px, 100%); background: var(--panel); border-left: 1px solid var(--line); padding: 20px 18px; overflow-y: auto; z-index: 10; box-shadow: -10px 0 30px rgb(0 0 0 / .35); }
+.retrato { display: block; width: 216px; height: 264px; margin: 4px auto 14px; image-rendering: pixelated; border-radius: 3px; box-shadow: 0 6px 24px rgb(0 0 0 / .45); }
 .panel h2 { margin: 0 32px 2px 0; font-size: 18px; }
 .panel p { margin: 4px 0; }
 .p-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 20px; cursor: pointer; }

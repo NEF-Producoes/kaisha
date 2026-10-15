@@ -1,6 +1,7 @@
 // Kaisha · escritório no navegador
 import { initEditor } from './editor.js?v=__V__';
-import { T, sprite, cached, agentLook, agentSprite, walkerSprite, sittingSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr } from './sprites.js?v=__V__';
+import { T, sprite, cached, agentLook, agentSprite, walkerSprite, sittingSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr, drawWall, sombraChao } from './sprites.js?v=__V__';
+import { desenharRetrato } from './retrato.js?v=__V__';
 
 const I18N = {
   'pt-BR': {
@@ -245,12 +246,7 @@ function buildStatic() {
     const floor = FLOORS[r.floor] || FLOORS.madeira;
     for (let cy = r.y + topo; cy < r.y + r.h; cy++) for (let cx = r.x; cx < r.x + r.w; cx++) floor(s, cx * T, cy * T, hashStr(`${cx},${cy}`) % 97, cx, cy);
     if (tint) { s.fillStyle = tint; s.fillRect(r.x * T, (r.y + topo) * T, r.w * T, (r.h - topo) * T); }
-    if (topo) {
-      const [wall, wallDark, base] = WALLS[r.wall] || WALLS.clara;
-      s.fillStyle = wall; s.fillRect(r.x * T, r.y * T, r.w * T, 2 * T);
-      s.fillStyle = wallDark; s.fillRect(r.x * T, r.y * T + 2 * T - 5, r.w * T, 3);
-      s.fillStyle = base; s.fillRect(r.x * T, r.y * T + 2 * T - 2, r.w * T, 2);
-    }
+    if (topo) drawWall(s, r.x * T, r.y * T, r.w * T, WALLS[r.wall] || WALLS.clara);
     if (!aberta) {
       s.fillStyle = '#2a2e37';
       s.fillRect(r.x * T, r.y * T, r.w * T, 2); s.fillRect(r.x * T, (r.y + r.h) * T - 2, r.w * T, 2);
@@ -290,15 +286,30 @@ function buildStatic() {
   // móveis (tapetes primeiro; os de parede ficam na faixa da parede; os de chão por ordem de altura)
   const items = (state.snap.office.furniture || []).map((f) => ({ f, key: furnitureKey(f.type), def: furniture(f.type) })).filter((x) => x.def);
   items.sort((a, b) => (FLAT_FURNITURE.has(b.key) - FLAT_FURNITURE.has(a.key)) || a.f.pos[1] - b.f.pos[1]);
-  for (const { f, def } of items) {
+  // luz das janelas entrando no chão da sala (uma faixa inclinada que vai sumindo); só de dia, desenhada a cada quadro
+  const luz = document.createElement('canvas'); luz.width = c.width; luz.height = c.height;
+  state.luzJanelas = luz;
+  for (const { f, key, def } of items) {
+    if (key !== 'janela') continue;
+    const r = rooms.find((q) => temParede(q) && f.pos[0] >= q.x && f.pos[0] < q.x + q.w && f.pos[1] < q.y + 2);
+    if (!r) continue;
+    const y0 = (r.y + 2) * T, alto = Math.min(3 * T, (r.y + r.h) * T - y0);
+    for (let dy = 0; dy < alto; dy++) {
+      const x0 = Math.max(r.x * T, Math.round(f.pos[0] * T + 2 + dy * 0.6)), x1 = Math.min((r.x + r.w) * T, Math.round(f.pos[0] * T + def.w - 2 + dy * 0.6));
+      if (x1 <= x0) continue;
+      const lg = luz.getContext('2d'); lg.fillStyle = `rgba(255,236,190,${(0.16 * (1 - dy / alto)).toFixed(3)})`; lg.fillRect(x0, y0 + dy, x1 - x0, 1);
+    }
+  }
+  for (const { f, key, def } of items) {
     s.save();
     const x = f.pos[0] * T, y = f.pos[1] * T;
+    if (!WALL_FURNITURE.has(key) && !FLAT_FURNITURE.has(key)) sombraChao(s, x + def.w / 2, y + def.h - 1, def.w / 2 - 1, 2, 0.28);
     if (f.flip) { s.translate(x * 2 + def.w, 0); s.scale(-1, 1); }
     def.draw(s, x, y);
     s.restore();
   }
   // mesas
-  for (const d of desks) furniture('mesa').draw(s, d.x * T, d.y * T);
+  for (const d of desks) { sombraChao(s, d.x * T + 16, d.y * T + 15, 15, 2, 0.3); furniture('mesa').draw(s, d.x * T, d.y * T); }
   // enfeites fixos do tema (os de parede pulam os blocos ocupados por janela, quadro, relógio…)
   const wallBusy = (cx, r) => items.some(({ f, def }) => f.pos[1] < r.y + 2 && f.pos[1] + def.h / T > r.y && cx >= f.pos[0] - 1 && cx < f.pos[0] + def.w / T + 1);
   rooms.forEach((r, ri) => {
@@ -1213,7 +1224,7 @@ function desenhaVisita(e) {
   const andando = e.mode === 'walk' || e.mode === 'senta';
   const fr = andando ? 1 + (Math.floor(e.step / 4) % 2) : 0;
   const x = Math.round(e.x - 8), y = Math.round(e.y - 20);
-  if (e.mode !== 'sentado') { g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2); }
+  if (e.mode !== 'sentado') sombraChao(g, x + 8, Math.round(e.y) - 1, 5, 1, 0.32);
   g.drawImage(walkerSprite(e.look, e.facing, fr), x, y);
   g.globalAlpha = 1;
 }
@@ -1231,6 +1242,7 @@ function frame(t) {
   g.imageSmoothingEnabled = false;
   g.setTransform(state.scale, 0, 0, state.scale, 0, 0);
   g.drawImage(state.staticLayer, 0, 0);
+  if (state.luzJanelas && state.periodo !== 'noite') g.drawImage(state.luzJanelas, 0, 0);
   luzesBanheiro();
   desenhaJogos();
   const heads = decorations('head');
@@ -1238,6 +1250,7 @@ function frame(t) {
   for (const e of state.ents.values()) drawMonitor(g, e.desk.x * T + 8, e.desk.y * T - 8, statusOf(e.id), tick + (hashStr(e.id) % 7));
   // cadeiras vazias e agentes, de cima para baixo
   const desenhos = [];
+  for (const e of state.ents.values()) sombraChao(g, e.desk.x * T + 16, e.desk.y * T + 27, 6, 1, 0.3);
   for (const e of state.ents.values()) {
     if (e.mode !== 'seated') desenhos.push({ y: e.desk.y * T + 27, f: () => g.drawImage(emptyChair(), e.desk.x * T + 8, e.desk.y * T + 9) });
     desenhos.push({ y: e.y, f: () => desenhaAgente(e, heads) });
@@ -1288,7 +1301,7 @@ function desenhaAgente(e, heads) {
       topo = Math.round(e.y) - 18;
       g.drawImage(agentSprite(e.look, j && j.inicio ? (tick % 2) + 1 : 0), x, topo);
     } else {
-      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2);
+      sombraChao(g, x + 8, Math.round(e.y) - 1, 5, 1, 0.32);
       g.drawImage(walkerSprite(e.look, e.facing, fr), x, y);
       topo = y;
     }
@@ -1668,6 +1681,7 @@ async function fillPanel(agent, carregar) {
   const a = state.agents.get(agent.id);
   const st = statusOf(agent.id);
   $('#p-name').textContent = agent.name || agent.id;
+  desenharRetrato($('#p-retrato'), agentLook(agent), agent.name || agent.id, { erro: st === 'error' });
   $('#p-role').textContent = [agent.role, agent.id !== agent.name ? agent.id : ''].filter(Boolean).join(' · ');
   $('#p-status').textContent = (L[st] || st) + (a && a.queue ? ' · ' + L.queue(a.queue) : '');
   $('#p-status').dataset.status = st;
