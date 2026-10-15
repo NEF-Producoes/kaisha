@@ -263,6 +263,22 @@ const server = http.createServer(async (req, res) => {
       broadcast(f, 'visits', visitasHoje(f));
       return json(res, 200, { ok: true, andar: f, dia: r.dia, visitas: r.lista.length });
     }
+    // reações: o escritório inteiro reage a algo que aconteceu (pagamento recebido = festa; atraso = preocupado)
+    // não muda o status de ninguém: { andar, agente, reacao: festa | preocupado | alivio, texto }
+    if (req.method === 'POST' && (p === '/api/reactions' || p === '/api/reacoes')) {
+      const quem = quemEscreve(req);
+      if (!quem) return json(res, 401, { erro: `header "${config.apiKeyHeader}" ausente ou inválido` });
+      const body = await readBody(req);
+      const TIPOS = { festa: 'festa', party: 'festa', aplauso: 'festa', applause: 'festa', comemorar: 'festa', preocupado: 'preocupado', worried: 'preocupado', preocupacao: 'preocupado', alivio: 'alivio', alívio: 'alivio', relief: 'alivio' };
+      const tipo = TIPOS[String(body.reaction ?? body.reacao ?? body.reação ?? body.tipo ?? '').trim().toLowerCase()];
+      if (!tipo) return json(res, 400, { erro: 'reacao: use festa, preocupado ou alivio' });
+      const agente = String(body.agent ?? body.agente ?? '').trim().slice(0, 64) || null;
+      const f = String(body.floor ?? body.andar ?? '').trim().toLowerCase() || andarPedido || quem.floor || (agente && floors.floorOfAgent(agente)) || MAIN;
+      if (!floors.has(f)) return semAndar(res, f);
+      if (!quem.master && quem.floor !== f) return negado();
+      broadcast(f, 'reaction', { tipo, agent: agente, texto: clip(body.text ?? body.texto, 80), em: Date.now() });
+      return json(res, 200, { ok: true, andar: f, reacao: tipo });
+    }
     // editor do painel: confere a chave e grava o escritório (cria o andar se ainda não existir, só com a chave geral)
     if (p === '/api/auth' && req.method === 'GET') {
       const quem = quemEscreve(req);

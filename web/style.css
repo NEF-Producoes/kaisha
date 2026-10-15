@@ -46,6 +46,9 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 .plate[data-status="error"] .plate-name::before { color: var(--error); }
 .plate[data-status="offline"] .plate-name::before { color: var(--offline); }
 .plate-role { color: var(--muted); font-weight: 400; white-space: nowrap; }
+.plate[data-fora="casa"], .plate[data-fora="almoco"] { opacity: .55; }
+.plate[data-fora="casa"] .plate-status::after { content: " · 🏠"; }
+.plate[data-fora="almoco"] .plate-status::after { content: " · 🍽️"; }
 .plate-status { font-weight: 400; white-space: nowrap; color: var(--idle); }
 .plate[data-status="working"] .plate-status { color: var(--working); }
 .plate[data-status="waiting"] .plate-status { color: var(--waiting); }

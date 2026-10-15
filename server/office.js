@@ -17,6 +17,7 @@ const ALIAS = {
   de: 'from', ate: 'to', até: 'to', enfeites: 'decorations', ponto: 'at', efeito: 'effect', desenhos: 'sprites',
   paleta: 'palette', pixels: 'pixels', cabelo: 'hair', pele: 'skin', roupa: 'shirt', idioma: 'lang', titulo: 'title', título: 'title',
   movel: 'movable', ordem: 'order', fica_na_sala: 'stay', fica_na_mesa: 'fixed', na_mesa: 'fixed', penteado: 'hairstyle', cabelo_estilo: 'hairstyle', na_sala: 'stay', stay_in_room: 'stay', planta: 'plan', central: 'central', inspetor: 'inspector', móvel: 'movable', calendarios: 'calendars', calendários: 'calendars', base: 'base', cada: 'every', escala: 'scale', espelhar: 'flip', mensagem: 'message',
+  expediente: 'hours', horario: 'hours', horário: 'hours', almoco: 'lunch', almoço: 'lunch', relogio: 'clock', relógio: 'clock',
 };
 const norm = (v) => {
   if (Array.isArray(v)) return v.map(norm);
@@ -83,6 +84,11 @@ export function validateOffice(raw) {
         hairstyle: ({ longo: 'long', long: 'long', comprido: 'long', curto: 'short', short: 'short' })[String(a.hairstyle || '').toLowerCase()] || null,
       })),
       furniture: furniture.map((f) => ({ type: String(f.type), pos: f.pos, room: f.room ? String(f.room) : null, flip: !!f.flip })),
+      // vida pelo relógio: expediente (fora dele todo mundo vai para casa e a luz apaga), almoço e happy hour
+      hours: o.hours != null && o.hours !== '' ? String(o.hours) : null,
+      lunch: o.lunch != null && o.lunch !== '' ? String(o.lunch) : null,
+      happy_hour: o.happy_hour != null && o.happy_hour !== '' ? String(o.happy_hour) : null,
+      clock: !(o.clock === false || ['nao', 'não', 'no', 'off', 'false'].includes(String(o.clock ?? '').toLowerCase())),
       special_days: special.map((d) => ({ date: String(d.date), name: String(d.name || ''), theme: d.theme ? String(d.theme) : null, message: d.message ? String(d.message) : null })),
     },
   };
@@ -265,6 +271,7 @@ export function toYaml(o) {
     salas: o.rooms.map((r) => limpa({ id: r.id, nome: r.name, tipo: r.kind === 'waiting' ? 'espera' : null, area: r.area, piso: r.floor, parede: r.wall && r.wall !== 'clara' ? r.wall : null })),
     agentes: o.agents.map((a) => limpa({ id: a.id, nome: a.name, cargo: a.role, sala: a.room, mesa: a.desk, cor: a.color, cabelo: a.hair, pele: a.skin, central: a.central || null, inspetor: a.inspector || null, fica_na_sala: a.stay || null, fica_na_mesa: a.fixed || null, penteado: a.hairstyle === 'long' ? 'longo' : a.hairstyle === 'short' ? 'curto' : null })),
     moveis: o.furniture.map((f) => limpa({ tipo: f.type, pos: f.pos, sala: f.room, espelhar: f.flip || null })),
+    expediente: o.hours, almoco: o.lunch, happy_hour: o.happy_hour, relogio: o.clock === false ? 'não' : null,
     datas_especiais: o.special_days && o.special_days.length ? o.special_days.map((d) => limpa({ data: d.date, nome: d.name, tema: d.theme, mensagem: d.message })) : null,
   });
   const doc = new YAML.Document(dados);

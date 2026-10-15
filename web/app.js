@@ -10,7 +10,7 @@ const I18N = {
     ago: (s) => (s < 60 ? 'agora' : s < 3600 ? `há ${Math.floor(s / 60)} min` : s < 86400 ? `há ${Math.floor(s / 3600)} h` : `há ${Math.floor(s / 86400)} d`),
     theme: 'Tema', agents: 'agentes', today: 'HOJE', success: 'Sucesso', question: 'Pergunta', inWaiting: 'na espera',
     needs: { sede: 'Sede', banheiro: 'Banheiro', social: 'Papo', diversao: 'Diversão', cansaco: 'Cansaço' },
-    doing: { beber: 'tomando um café ou água', banheiro: 'no banheiro', celular: 'no celular, no sofá', ler: 'lendo um livro', cochilar: 'cochilando no sofá', papo: 'batendo papo', jogo_sinuca: 'jogando sinuca', jogo_pebolim: 'jogando pebolim', jogo_videogame: 'jogando videogame', indo: 'indo', livre: 'à toa', mesa: 'trabalhando na mesa', fixo: 'não sai da mesa' }, now: 'Agora', wins: 'Vitórias hoje',
+    doing: { beber: 'tomando um café ou água', banheiro: 'no banheiro', celular: 'no celular, no sofá', ler: 'lendo um livro', cochilar: 'cochilando no sofá', papo: 'batendo papo', jogo_sinuca: 'jogando sinuca', jogo_pebolim: 'jogando pebolim', jogo_videogame: 'jogando videogame', almocar: 'almoçando', happy: 'no happy hour', embora: 'indo embora', casa: 'em casa', almocoFora: 'almoçando fora', aplaudir: 'aplaudindo', disfarce: 'disfarçando (o chefe passou)', indo: 'indo', livre: 'à toa', mesa: 'trabalhando na mesa', fixo: 'não sai da mesa' }, now: 'Agora', wins: 'Vitórias hoje',
   },
   en: {
     working: 'Working', waiting: 'Waiting', idle: 'Idle', error: 'Error', offline: 'Offline',
@@ -19,7 +19,7 @@ const I18N = {
     ago: (s) => (s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`),
     theme: 'Theme', agents: 'agents', today: 'TODAY', success: 'Success', question: 'Question', inWaiting: 'waiting room',
     needs: { sede: 'Thirst', banheiro: 'Bathroom', social: 'Chat', diversao: 'Fun', cansaco: 'Tiredness' },
-    doing: { beber: 'having coffee or water', banheiro: 'in the bathroom', celular: 'on the phone, on the couch', ler: 'reading a book', cochilar: 'napping on the couch', papo: 'chatting', jogo_sinuca: 'playing pool', jogo_pebolim: 'playing foosball', jogo_videogame: 'playing video games', indo: 'on the way', livre: 'idling', mesa: 'working at the desk', fixo: 'stays at the desk' }, now: 'Now', wins: 'Wins today',
+    doing: { beber: 'having coffee or water', banheiro: 'in the bathroom', celular: 'on the phone, on the couch', ler: 'reading a book', cochilar: 'napping on the couch', papo: 'chatting', jogo_sinuca: 'playing pool', jogo_pebolim: 'playing foosball', jogo_videogame: 'playing video games', almocar: 'having lunch', happy: 'at happy hour', embora: 'heading home', casa: 'at home', almocoFora: 'out for lunch', aplaudir: 'clapping', disfarce: 'pretending to work', indo: 'on the way', livre: 'idling', mesa: 'working at the desk', fixo: 'stays at the desk' }, now: 'Now', wins: 'Wins today',
   },
 };
 let L = I18N['pt-BR'];
@@ -116,7 +116,7 @@ function buildNav() {
   // lugares das vontades: água/café, sofás (fora da sala de espera), banheiros e estantes
   const ok = (x, y) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x];
   const espera = rooms.findIndex((r) => r.kind === 'waiting');
-  const lugares = { agua: [], sofas: [], banheiros: [], estantes: [], jogos: [] };
+  const lugares = { agua: [], sofas: [], banheiros: [], estantes: [], jogos: [], mesa: [] };
   (state.snap.office.furniture || []).forEach((f, fi) => {
     const key = furnitureKey(f.type), def = key && furniture(key);
     if (!def) return;
@@ -131,6 +131,11 @@ function buildNav() {
     if (key === 'banheiro') {
       const fx = [f.pos[0], f.pos[0] + tw - 1].find((x) => ok(x, fy));
       if (fx != null) lugares.banheiros.push({ id: fi, frente: fy * W + fx, x: f.pos[0], y: f.pos[1] });
+    }
+    // mesa de reunião: lugares em volta para almoço e happy hour
+    if (key === 'mesa_reuniao') for (let x = f.pos[0]; x < f.pos[0] + tw; x++) {
+      if (ok(x, f.pos[1] - 1)) lugares.mesa.push({ tile: (f.pos[1] - 1) * W + x, facing: 'down' });
+      if (ok(x, f.pos[1] + th)) lugares.mesa.push({ tile: (f.pos[1] + th) * W + x, facing: 'up' });
     }
     // jogos: onde cada jogador fica (e para onde olha)
     if (key === 'sinuca' || key === 'pebolim' || key === 'videogame') {
@@ -178,7 +183,16 @@ function buildNav() {
     for (let q = 0; q < lista.length; q++) for (const n of vizinhos(lista[q], W, H)) if (comp[n] < 0 && pass(lista[q], n)) { comp[n] = id; lista.push(n); }
     comps.push(lista);
   }
-  state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x),
+  // saída do escritório: um bloco na borda de baixo da maior região (por onde se chega e se vai embora)
+  const maior = comps.reduce((a, b) => (b.length > a.length ? b : a), []);
+  let saida = -1, nota = -Infinity;
+  for (const i of maior) {
+    const x = i % W, y = (i / W) | 0;
+    if (!(y === H - 1 || floor[i + W] < 0)) continue;
+    const n = y * 1000 - Math.abs(x - W / 2);
+    if (n > nota) { nota = n; saida = i; }
+  }
+  state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, saida, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x),
     cafes: cafes.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x), lugares };
   state.jogos = new Map();
   state.slots = new Map(); // lugar reservado -> agente (um por cadeira de sofá, ponto do bebedouro, banheiro…)
@@ -351,7 +365,9 @@ function syncEntities() {
     if (e) { e.desk = d; e.seat = seat; e.agent = d.agent; e.look = agentLook(d.agent); }
     else {
       e = { id, desk: d, agent: d.agent, seat, look: agentLook(d.agent), path: [], facing: 'down', step: 0, timer: 0, last: st };
-      if (naMesa(d.agent) || ATIVO.has(st) || seat.entrada < 0) sentar(e);
+      // abriu o painel fora do expediente: quem está livre já está em casa
+      if (!ATIVO.has(st) && !d.agent.central && state.relogioCfg && periodo() === 'noite') Object.assign(e, { mode: 'casa', fora: 'casa', alfa: 0, x: seat.x, y: seat.y, path: [] });
+      else if (naMesa(d.agent) || ATIVO.has(st) || seat.entrada < 0) sentar(e);
       else {
         // começa em pé num lugar qualquer da mesma região da mesa
         const lista = areaDoAgente({ agent: d.agent, seat }, seat.entrada);
@@ -364,6 +380,7 @@ function syncEntities() {
     if (e.atv || e.mode === 'atividade') { e.atv = null; e.indo = false; e.oculto = false; if (e.mode === 'atividade') { e.mode = 'pause'; e.timer = rnd(500, 1500); } }
     // se a mesa mudou de lugar com o agente sentado, ele vai junto
     if (e.mode === 'seated') { e.x = seat.x; e.y = seat.y; }
+    else if (e.mode === 'casa' || e.mode === 'sumindo') { e.x = seat.x; e.y = seat.y; }
     else if (!state.nav.walk[blocoDe(e.x, e.y)]) sentar(e);
     ents.set(id, e);
   }
@@ -406,6 +423,7 @@ function irParaMesa(e, calmo = false) {
   e.path = p; e.mode = calmo ? 'voltar' : 'run';
 }
 function chamar(e) {
+  if (e.mode === 'casa' || e.mode === 'sumindo') aparecer(e); // estava em casa: aparece na mesa
   if (e.atv) terminar(e); // larga o que estava fazendo (sai do banheiro, levanta do sofá…)
   // a tarefa sai da mesa do agente central (o Musashi) e chega no celular de quem vai fazer
   const central = [...state.ents.values()].find((x) => x.agent.central && x !== e);
@@ -464,6 +482,15 @@ function envelhecer(e, st, dt) {
 }
 function decidir(e) {
   const v = e.vont, nav = state.nav;
+  // o relógio manda antes das vontades: fora do expediente vai para casa; no almoço come; sexta tem happy hour
+  const per = state.periodo;
+  if (per === 'noite' && !e.agent.central) { irEmbora(e); return; }
+  if (per === 'almoco' && e.almoco !== hojeChave() && !naMesa(e.agent)) {
+    e.almoco = hojeChave();
+    if (Math.random() < 0.5 && comecarRefeicao(e, 'almocar')) return;
+    irEmbora(e, 'almoco', Date.now() + rnd(20, 45) * 60000 / PRESSA); return;
+  }
+  if (per === 'happy' && Math.random() < 0.8 && comecarRefeicao(e, 'happy')) return;
   if (!v || !nav.lugares) { passear(e); return; }
   const opcoes = [];
   if (v.banheiro > VONTADE + 5) opcoes.push(['banheiro', v.banheiro + 10]);
@@ -527,6 +554,12 @@ function chegouAtividade(e) {
   else if (a.tipo === 'banheiro') { e.timer = rnd(14000, 26000); e.oculto = true; }
   else if (a.tipo === 'celular' || a.tipo === 'cochilar') { e.x = a.sofa.px; e.y = a.sofa.py; e.facing = 'down'; e.timer = a.tipo === 'cochilar' ? rnd(20000, 40000) : rnd(15000, 30000); }
   else if (a.tipo === 'ler') { e.timer = rnd(10000, 18000); e.facing = 'down'; }
+  else if (a.tipo === 'embora') { e.atv = null; e.mode = 'sumindo'; return; }
+  else if (a.tipo === 'almocar' || a.tipo === 'happy') {
+    e.facing = a.facing || 'down';
+    e.timer = (a.tipo === 'almocar' ? rnd(15, 25) : rnd(4, 8)) * 60000 / PRESSA;
+    a.comida = ['🍝', '🍔', '🥗', '🍱', '🍕', '🌮'][hashStr(e.id + hojeChave()) % 6];
+  }
   else if (a.tipo === 'jogar') {
     const j = state.jogos.get(a.jogo);
     if (!j) { e.atv = null; e.mode = 'pause'; e.timer = rnd(800, 2000); return; }
@@ -583,6 +616,8 @@ function concluir(e) {
     else if (a.tipo === 'celular') { v.diversao = rnd(0, 10); v.cansaco = Math.max(0, v.cansaco - 10); }
     else if (a.tipo === 'ler') v.diversao = rnd(5, 15);
     else if (a.tipo === 'cochilar') v.cansaco = rnd(0, 10);
+    else if (a.tipo === 'almocar') { v.social = Math.max(0, v.social - 30); v.sede = Math.max(0, v.sede - 30); v.cansaco = Math.min(100, v.cansaco + 10); }
+    else if (a.tipo === 'happy') { v.social = rnd(0, 5); v.diversao = rnd(0, 5); v.banheiro = Math.min(100, v.banheiro + 35); }
     else if (a.tipo === 'papo') {
       for (const x of [e, state.ents.get(a.com)]) if (x && x.vont) { x.vont.social = rnd(0, 8); x.vont.diversao = Math.max(0, x.vont.diversao - 15); }
     }
@@ -645,7 +680,182 @@ function contarVitoria(id, tipo) {
   try { localStorage.setItem(chaveVitorias(), JSON.stringify(v)); } catch {}
 }
 
-const FAZENDO = { beber: 'beber', banheiro: 'banheiro', celular: 'celular', ler: 'ler', cochilar: 'cochilar', papo: 'papo', esperaPapo: 'papo', jogar: 'jogar' };
+// ---------- relógio: expediente, almoço, happy hour e noite ----------
+// expediente: "seg-sex 08:00-18:00" (padrão); almoco: "12:00-13:00"; happy_hour: "sex 16:30-18:00"; relogio: não desliga tudo
+const DIAS = { dom: 0, seg: 1, ter: 2, qua: 3, qui: 4, sex: 5, sab: 6, sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+const Q = new URLSearchParams(location.search);
+function faixa(txt, diasPadrao) {
+  const t = String(txt || '').toLowerCase().replace(/á/g, 'a').replace(/à/g, 'a');
+  if (!t || /^(nao|não|no|off|false|nenhum|-)$/.test(t)) return null;
+  let dias = diasPadrao;
+  const md = t.match(/\b(dom|seg|ter|qua|qui|sex|sab|sun|mon|tue|wed|thu|fri|sat)[a-z]*(?:\s*(?:-|–|a|ate|to)\s*(dom|seg|ter|qua|qui|sex|sab|sun|mon|tue|wed|thu|fri|sat)[a-z]*)?/);
+  if (md) { const a = DIAS[md[1]], b = md[2] != null ? DIAS[md[2]] : a; dias = new Set(); for (let d = a; ; d = (d + 1) % 7) { dias.add(d); if (d === b) break; } }
+  const mh = t.match(/(\d{1,2})(?:[:h](\d{2}))?\s*(?:-|–|as|a|ate|to)\s*(\d{1,2})(?:[:h](\d{2}))?/);
+  if (!mh) return null;
+  return { dias, de: +mh[1] * 60 + (+mh[2] || 0), ate: +mh[3] * 60 + (+mh[4] || 0) };
+}
+function lerRelogio(o) {
+  if (!o || o.clock === false) return null;
+  const util = new Set([1, 2, 3, 4, 5]);
+  const exp = faixa(o.hours || 'seg-sex 08:00-18:00', util) || faixa('seg-sex 08:00-18:00', util);
+  return { exp, almoco: faixa(o.lunch || '12:00-13:00', exp.dias), happy: faixa(o.happy_hour || 'sex 16:30-18:00', new Set([5])) };
+}
+// ?hora=22:30 e ?dia=sex no endereço simulam outro horário (para testar)
+function agoraRelogio() {
+  const d = new Date(Date.now() - (state.clockSkew || 0));
+  let dia = d.getDay(), min = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  const h = (Q.get('hora') || '').match(/^(\d{1,2})(?::(\d{2}))?$/);
+  if (h) min = +h[1] * 60 + (+h[2] || 0);
+  const dq = (Q.get('dia') || '').toLowerCase().slice(0, 3);
+  if (DIAS[dq] != null) dia = DIAS[dq];
+  return { dia, min };
+}
+const hojeChave = () => new Date(Date.now() - (state.clockSkew || 0)).toLocaleDateString('sv');
+const dentro = (f, r) => !!f && f.dias.has(r.dia) && r.min >= f.de && r.min < f.ate;
+function periodo() {
+  const c = state.relogioCfg;
+  if (!c) return 'trabalho';
+  const r = agoraRelogio();
+  if (!dentro(c.exp, r)) return 'noite';
+  if (dentro(c.almoco, r)) return 'almoco';
+  if (dentro(c.happy, r)) return 'happy';
+  return 'trabalho';
+}
+// a luz vai baixando meia hora depois do fim do expediente e volta meia hora antes do início
+function escuridao() {
+  const c = state.relogioCfg;
+  if (!c) return 0;
+  const r = agoraRelogio(), MAX = 0.55;
+  if (!c.exp.dias.has(r.dia)) return MAX;
+  const antes = c.exp.de - r.min, depois = r.min - c.exp.ate;
+  const k = antes > 0 ? 1 - Math.min(1, Math.max(0, (30 - antes) / 30)) : depois >= 0 ? Math.min(1, depois / 30) : 0;
+  return k * MAX;
+}
+function irEmbora(e, motivo = 'casa', volta = 0) {
+  if (e.atv) terminar(e);
+  e.fora = motivo; e.voltaEm = volta;
+  if (e.mode === 'seated' && !naMesa(e.agent)) levantar(e);
+  const sai = state.nav.saida;
+  const p = !naMesa(e.agent) && sai >= 0 && e.mode !== 'seated' ? caminho(blocoDe(e.x, e.y), sai) : null;
+  if (p && p.length) { e.path = p; e.mode = 'walk'; e.poi = false; e.indo = true; e.atv = { tipo: 'embora' }; }
+  else { e.mode = 'sumindo'; e.path = []; }
+}
+// voltou do almoço ou chegou de manhã: entra pela saída e vai para a mesa
+function chegar(e) {
+  e.fora = null; e.voltaEm = 0; e.alfa = 0;
+  const sai = state.nav.saida;
+  const p = !naMesa(e.agent) && sai >= 0 && e.seat.entrada >= 0 ? caminho(sai, e.seat.entrada) : null;
+  if (p && p.length) { Object.assign(e, centroBloco(sai)); e.path = p; e.mode = 'voltar'; }
+  else sentar(e);
+}
+// chamado em casa: aparece direto na frente da mesa
+function aparecer(e) {
+  e.fora = null; e.voltaEm = 0; e.alfa = 0.01; e.path = [];
+  if (e.seat.entrada >= 0) Object.assign(e, centroBloco(e.seat.entrada));
+  e.mode = 'pause';
+}
+// almoço e happy hour: lugares em volta da mesa de reunião (e, no happy hour, perto do café e do bebedouro)
+function comecarRefeicao(e, tipo) {
+  const L2 = state.nav.lugares;
+  if (!L2) return false;
+  const aqui = blocoDe(e.x, e.y), area = new Set(areaDoAgente(e, aqui));
+  const lugares = [...L2.mesa, ...(tipo === 'happy' ? L2.agua.map((a) => ({ tile: a.tile, facing: 'down' })) : [])];
+  // de preferência sem ninguém do lado, para as placas de nome não se encavalarem
+  const vizinhos = (t) => (state.slots.has('m:' + (t - 1)) ? 1 : 0) + (state.slots.has('m:' + (t + 1)) ? 1 : 0);
+  const livres = lugares.filter((l) => area.has(l.tile) && !state.slots.has('m:' + l.tile)).map((l) => [vizinhos(l.tile) + Math.random() * 0.9, l]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  for (const l of livres) {
+    const p = caminho(aqui, l.tile);
+    if (!p) continue;
+    state.slots.set('m:' + l.tile, e.id);
+    e.atv = { tipo, key: 'm:' + l.tile, facing: l.facing };
+    e.path = p; e.mode = 'walk'; e.poi = false; e.indo = true;
+    return true;
+  }
+  return false;
+}
+
+// ---------- reações ----------
+// POST /api/reactions: festa (todo mundo aplaude quem recebeu), preocupado (gota de suor por 10 min), alivio
+function reagir(r) {
+  if (!state.ents) return;
+  const alvo = r.agent ? state.ents.get(r.agent) : null;
+  const agora = Date.now();
+  if (r.tipo === 'festa') {
+    if (alvo) {
+      alvo.preocupado = 0;
+      if (!ATIVO.has(statusOf(alvo.id)) && !['casa', 'sumindo'].includes(alvo.mode) && !alvo.oculto) comemorar(alvo, r.texto || '');
+      else confete(alvo.desk.x * T + 16, alvo.desk.y * T + 2, alvo.look.shirt[0]);
+    }
+    for (const e of state.ents.values()) {
+      if (e === alvo || e.oculto || ['casa', 'sumindo', 'run', 'ring', 'buscar', 'chamando'].includes(e.mode) || ATIVO.has(statusOf(e.id))) continue;
+      e.reacao = { emoji: '👏', ate: agora + 3500 };
+      if (e.mode === 'pause' || e.mode === 'walk') {
+        if (e.atv) terminar(e);
+        e.path = []; e.mode = 'aplaudir'; e.timer = 3000;
+        if (alvo) e.facing = virarPara(e, alvo.mode === 'seated' ? { x: alvo.desk.x * T + 16, y: alvo.desk.y * T + 27 } : alvo);
+      }
+    }
+  } else if (r.tipo === 'preocupado' && alvo) { alvo.preocupado = agora + 10 * 60000; alvo.reacao = { emoji: '😟', ate: agora + 4000 }; }
+  else if (r.tipo === 'alivio' && alvo) { alvo.preocupado = 0; alvo.reacao = { emoji: '😮‍💨', ate: agora + 3500 }; }
+}
+// alguém deu erro: quem está livre por perto olha assustado
+function olharErro(e) {
+  const agora = Date.now(), alvo = e.mode === 'seated' ? { x: e.desk.x * T + 16, y: e.desk.y * T + 27 } : e;
+  for (const o of state.ents.values()) {
+    if (o === e || o.oculto || !['pause', 'walk'].includes(o.mode) || ATIVO.has(statusOf(o.id))) continue;
+    if (Math.hypot(o.x - alvo.x, o.y - alvo.y) > 10 * T) continue;
+    if (o.atv) terminar(o);
+    o.path = []; o.mode = 'pause'; o.timer = 2500; o.facing = virarPara(o, alvo);
+    o.reacao = { emoji: '😮', ate: agora + 2500 };
+  }
+}
+// o agente central recebeu tarefa: quem está jogando ou no sofá às vezes disfarça e volta para a mesa
+function chefePassa(chefe) {
+  const agora = Date.now();
+  for (const o of [...state.ents.values()]) {
+    if (o === chefe || naMesa(o.agent) || o.mode !== 'atividade' || !o.atv || !['jogar', 'celular', 'ler', 'cochilar'].includes(o.atv.tipo) || Math.random() < 0.5) continue;
+    terminar(o);
+    o.reacao = { emoji: '😳', ate: agora + 2500 };
+    o.disfarce = agora + rnd(20000, 40000);
+    irParaMesa(o, true);
+  }
+}
+// gota de suor (preocupado)
+function suor(x, topo) {
+  const k = (Date.now() / 900) % 1;
+  pinta(x + 13, topo + 1 + Math.round(k * 4), 2, 3, '#7fc4f0'); pinta(x + 13, topo + Math.round(k * 4), 1, 1, '#b7dcf2');
+}
+// noite: escurece tudo, com a luz do monitor acesa em quem está na mesa
+function desenhaNoite() {
+  const k = escuridao();
+  if (k <= 0) return;
+  const { W, H } = state.layout;
+  let c = state.noiteCanvas;
+  if (!c || c.width !== W * T || c.height !== H * T) { c = document.createElement('canvas'); c.width = W * T; c.height = H * T; state.noiteCanvas = c; }
+  const n = c.getContext('2d');
+  n.globalCompositeOperation = 'source-over';
+  n.clearRect(0, 0, c.width, c.height);
+  n.fillStyle = `rgba(10,16,38,${k.toFixed(3)})`; n.fillRect(0, 0, c.width, c.height);
+  n.globalCompositeOperation = 'destination-out';
+  const luzes = [];
+  for (const e of state.ents.values()) {
+    if (e.mode !== 'seated') continue;
+    const cx = e.desk.x * T + 16, cy = e.desk.y * T + 6;
+    luzes.push([cx, cy]);
+    const gr = n.createRadialGradient(cx, cy, 6, cx, cy, 44);
+    gr.addColorStop(0, 'rgba(0,0,0,0.95)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    n.fillStyle = gr; n.fillRect(cx - 44, cy - 44, 88, 88);
+  }
+  g.drawImage(c, 0, 0);
+  // brilho quente do abajur
+  for (const [cx, cy] of luzes) {
+    const gr = g.createRadialGradient(cx, cy, 2, cx, cy, 30);
+    gr.addColorStop(0, `rgba(255,214,140,${(0.22 * k / 0.55).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,214,140,0)');
+    g.fillStyle = gr; g.fillRect(cx - 30, cy - 30, 60, 60);
+  }
+}
+
+const FAZENDO = { beber: 'beber', banheiro: 'banheiro', celular: 'celular', ler: 'ler', cochilar: 'cochilar', papo: 'papo', esperaPapo: 'papo', jogar: 'jogar', almocar: 'almocar', happy: 'happy', embora: 'embora' };
 
 // erro: o inspetor (ex.: Sentinela) vai até a mesa de quem falhou
 function chamarInspetor(alvo) {
@@ -665,6 +875,8 @@ function chamarInspetor(alvo) {
 
 function mudouStatus(e, st) {
   if (st === 'error' && e.last !== 'error' && !e.agent.inspector) chamarInspetor(e);
+  if (st === 'error' && e.last !== 'error') olharErro(e);
+  if (e.agent.central && ATIVO.has(st) && !ATIVO.has(e.last)) chefePassa(e);
   if (ATIVO.has(st) && !ATIVO.has(e.last)) {
     if (!['seated', 'run', 'ring', 'buscar', 'chamando', 'voltar'].includes(e.mode)) chamar(e);
     else if (e.mode === 'seated' && !e.agent.central) {
@@ -696,10 +908,33 @@ function atualizar(dt) {
     const st = statusOf(e.id);
     if (st !== e.last) mudouStatus(e, st);
     const ativo = ATIVO.has(st);
-    if (e.vont) envelhecer(e, st, dt);
+    if (e.vont && e.mode !== 'casa') envelhecer(e, st, dt);
+    if (e.alfa != null && e.alfa < 1 && e.mode !== 'sumindo' && e.mode !== 'casa') e.alfa = Math.min(1, e.alfa + dt / 600);
     switch (e.mode) {
+      case 'casa': {
+        if (ativo) { chamar(e); break; }
+        if (e.fora === 'casa' && state.periodo !== 'noite' && !e.voltaEm) e.voltaEm = Date.now() + rnd(0, 20 * 60000) / PRESSA;
+        if (e.fora === 'almoco' && state.periodo === 'noite') { e.fora = 'casa'; e.voltaEm = 0; }
+        if (e.voltaEm && Date.now() >= e.voltaEm) chegar(e);
+        break;
+      }
+      case 'sumindo':
+        if (ativo) { e.alfa = 1; chamar(e); break; }
+        e.alfa = (e.alfa ?? 1) - dt / 700;
+        if (e.alfa <= 0) { Object.assign(e, { alfa: 0, mode: 'casa', path: [], x: e.seat.x, y: e.seat.y }); }
+        break;
+      case 'aplaudir':
+        if (ativo) { chamar(e); break; }
+        e.timer -= dt; if (e.timer <= 0) { e.mode = 'pause'; e.timer = rnd(800, 2000); }
+        break;
+      case 'chegando':
+        // chegando para trabalhar: entra pela saída e vai direto para a mesa
+        if (ativo) { chamar(e); break; }
+        if (andar(e, dt, VEL.walk * 1.1)) { const p = e.seat.entrada >= 0 ? caminho(blocoDe(e.x, e.y), e.seat.entrada) : null; if (p && p.length) { e.path = p; e.mode = 'voltar'; } else sentar(e); }
+        break;
       case 'seated':
-        if (!ativo && !naMesa(e.agent)) { e.timer -= dt; if (e.timer <= 0) levantar(e); }
+        if (!ativo && naMesa(e.agent) && !e.agent.central && state.periodo === 'noite') { irEmbora(e); break; }
+        if (!ativo && !naMesa(e.agent) && !(e.disfarce > Date.now())) { e.timer -= dt; if (e.timer <= 0) levantar(e); }
         break;
       case 'pause':
         if (ativo) { chamar(e); break; }
@@ -988,6 +1223,7 @@ function frame(t) {
   if (!state.layout || !state.staticLayer || !state.ents) return;
   const dt = Math.min(100, lastT ? t - lastT : 16); lastT = t;
   if (t - lastTick > 140) { tick++; lastTick = t; }
+  state.periodo = periodo();
   atualizar(dt);
   atualizarVisitas(dt);
   g.imageSmoothingEnabled = false;
@@ -1007,6 +1243,7 @@ function frame(t) {
   for (const v of state.visitas.values()) desenhos.push({ y: v.y, f: () => desenhaVisita(v) });
   for (const c of state.chamadas.values()) desenhos.push({ y: 1e6, f: () => desenhaChamada(c) });
   desenhos.sort((a, b) => a.y - b.y).forEach((d) => d.f());
+  desenhaNoite();
   desenhaCorreio(dt);
   desenhaConfete(dt);
   drawEffect();
@@ -1018,17 +1255,23 @@ function frame(t) {
 function desenhaAgente(e, heads) {
   if (e.oculto) return; // no banheiro
   const st = statusOf(e.id);
-  g.globalAlpha = st === 'offline' ? 0.55 : 1;
+  g.globalAlpha = (st === 'offline' ? 0.55 : 1) * (e.alfa ?? 1);
+  if (e.mode === 'casa') { g.globalAlpha = 1; return; }
   let topo;
   if (e.mode === 'seated') {
     const x = e.desk.x * T + 8, y = e.desk.y * T + 9;
-    const fr = st === 'working' ? (tick % 2) + 1 : 0;
+    const finge = e.disfarce > Date.now(); // o chefe passou: finge que está trabalhando
+    const fr = st === 'working' || finge ? (tick % 2) + 1 : 0;
     const bob = st === 'error' ? 1 : st === 'idle' && tick % 12 < 6 ? 1 : 0; // com erro, ombros caídos
     g.drawImage(agentSprite(e.look, fr), x, y + bob);
     topo = y + bob;
     if (st === 'waiting') maoLevantada(x, y + bob, e.look);
+    // almoço na mesa (quem não sai dela)
+    if (state.periodo === 'almoco' && !ATIVO.has(st) && naMesa(e.agent) && !e.agent.central) { pinta(x + 4, y + bob + 1, 8, 2, '#f7f3ea'); pinta(x + 6, y + bob, 4, 1, '#d98f3f'); if (Math.floor(Date.now() / 6000) % 3 === 0) balao(x + 8, y + bob, '🍱'); }
+    if (e.reacao && e.reacao.ate > Date.now()) balao(x + 8, y + bob, e.reacao.emoji);
+    if (e.preocupado > Date.now()) suor(x, y + bob);
   } else {
-    const andando = e.mode === 'walk' || e.mode === 'run' || e.mode === 'visit' || e.mode === 'buscar' || e.mode === 'voltar';
+    const andando = e.mode === 'walk' || e.mode === 'run' || e.mode === 'visit' || e.mode === 'buscar' || e.mode === 'voltar' || e.mode === 'chegando';
     const fr = andando ? 1 + (Math.floor(e.step / (e.mode === 'run' ? 5 : 4)) % 2) : 0;
     // comemorando: pulinhos
     const quica = e.mode === 'celebrate' ? -Math.round(Math.abs(Math.sin(e.step * 7)) * 7) : andando && fr === 1 ? -1 : 0;
@@ -1048,7 +1291,9 @@ function desenhaAgente(e, heads) {
       topo = y;
     }
     if (atv) desenhaAtividade(e, x, topo);
+    if (e.mode === 'aplaudir') { if (tick % 2) bracosParaCima(x, y, e.look); }
     if (e.reacao && e.reacao.ate > Date.now()) balao(x + 8, topo, e.reacao.emoji);
+    if (e.preocupado > Date.now() && !(e.reacao && e.reacao.ate > Date.now())) suor(x, topo);
     if (e.mode === 'celebrate') bracosParaCima(x, y, e.look);
     if (e.mode === 'inspect') lupa(Math.round(e.x) + 5, y + 7);
     if (e.mode === 'ring') {
@@ -1088,6 +1333,15 @@ function desenhaAtividade(e, x, y) {
   } else if (a.tipo === 'ler') {
     const capa = ['#c0504d', '#4f81bd', '#9bbb59', '#8064a2'][hashStr(e.id) % 4];
     pinta(x + 3, y + 10, 10, 5, capa); pinta(x + 4, y + 10, 4, 4, '#f7f3ea'); pinta(x + 8, y + 10, 4, 4, '#f7f3ea'); pinta(x + 8, y + 10, 1, 5, capa);
+  } else if (a.tipo === 'almocar') {
+    // prato na mão e, de vez em quando, o que está comendo
+    pinta(x + 3, y + 12, 10, 3, '#f7f3ea'); pinta(x + 5, y + 12, 6, 1, '#d98f3f'); pinta(x + 6, y + 11, 3, 1, '#4fa66a');
+    if (Math.floor(e.step / 5) % 3 === 1) balao(x + 8, y, a.comida || '🍝');
+  } else if (a.tipo === 'happy') {
+    pinta(x + 11, y + 9, 3, 5, '#d9a441'); pinta(x + 11, y + 8, 3, 1, '#ffffff'); pinta(x + 14, y + 10, 1, 2, '#d9a441');
+    const k = Math.floor(e.step / 2.5) + (hashStr(e.id) % 4);
+    if (k % 2 === 0) balao(x + 8, y, ['🍻', '🎉', '🍕', '🥳', '😂', '🎶'][k % 6]);
+    if (Math.random() < 0.0015) confete(e.x, e.y - 18, e.look.shirt[0]);
   } else if (a.tipo === 'jogar') {
     const j = state.jogos.get(a.jogo);
     if (!j) return;
@@ -1325,7 +1579,9 @@ function moverOverlay() {
     // dentro do banheiro: some a placa também
     const oculto = !!e.oculto;
     if (n.oculto !== oculto) { n.oculto = oculto; for (const x of [n.plate, n.bubble, n.hit]) x.style.visibility = oculto ? 'hidden' : ''; }
-    const sentado = e.mode === 'seated';
+    const sentado = e.mode === 'seated' || e.mode === 'casa';
+    const fora = e.mode === 'casa' ? e.fora || 'casa' : '';
+    if ((n.plate.dataset.fora || '') !== fora) n.plate.dataset.fora = fora;
     const cx = sentado ? e.desk.x * T + 16 : Math.round(e.x);
     const pe = sentado ? e.desk.y * T + 29 : Math.round(e.y) + 2;
     const cabeca = sentado ? e.desk.y * T - 10 : Math.round(e.y) - (e.mode === 'ring' ? 36 : 24);
@@ -1409,7 +1665,7 @@ function mostrarVontades(agent) {
   if (!e || !e.vont) { box.hidden = true; return; }
   box.hidden = false;
   const a = e.atv;
-  const agora = naMesa(e.agent) ? L.doing.fixo : e.mode === 'seated' ? L.doing.mesa : a ? (e.indo ? L.doing.indo + ': ' : '') + (a.tipo === 'jogar' ? L.doing['jogo_' + a.jogoTipo] : L.doing[FAZENDO[a.tipo]]) : L.doing.livre;
+  const agora = e.mode === 'casa' ? (e.fora === 'almoco' ? L.doing.almocoFora : L.doing.casa) : e.mode === 'aplaudir' ? L.doing.aplaudir : e.disfarce > Date.now() && e.mode === 'seated' ? L.doing.disfarce : naMesa(e.agent) ? L.doing.fixo : e.mode === 'seated' ? L.doing.mesa : a ? (e.indo ? L.doing.indo + ': ' : '') + (a.tipo === 'jogar' ? L.doing['jogo_' + a.jogoTipo] : L.doing[FAZENDO[a.tipo]] || a.tipo) : L.doing.livre;
   const linhas = [el('div', 'n-now', `${L.now}: ${agora}`)];
   for (const k of ['sede', 'banheiro', 'social', 'diversao', 'cansaco']) {
     const v = Math.round(e.vont[k]);
@@ -1445,6 +1701,7 @@ function applySnapshot(snap) {
   if (state.editing) { state.pendingSnap = snap; return; }
   const mudouTema = !state.snap || (state.snap.theme && state.snap.theme.id) !== (snap.theme && snap.theme.id);
   state.snap = snap;
+  state.relogioCfg = lerRelogio(snap.office);
   const lang = snap.office.lang || state.lang || 'pt-BR';
   L = I18N[lang] || I18N[lang.split('-')[0]] || I18N['pt-BR'];
   document.documentElement.lang = lang;
@@ -1508,6 +1765,7 @@ function connect() {
   es.addEventListener('floors', (e) => mostrarAndares(JSON.parse(e.data)));
   es.addEventListener('score', (e) => { state.score = JSON.parse(e.data); mostrarPlacar(); });
   es.addEventListener('office', (e) => applySnapshot(JSON.parse(e.data)));
+  es.addEventListener('reaction', (e) => reagir(JSON.parse(e.data)));
   es.addEventListener('removed', (e) => { state.agents.delete(JSON.parse(e.data).id); rebuild(); });
   let caiu = false;
   es.onerror = () => { dot.dataset.on = '0'; dot.title = L.reconnecting; caiu = true; };
