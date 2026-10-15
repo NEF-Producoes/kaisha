@@ -1,0 +1,111 @@
+# Kaisha · exemplo de andar único com três alas (três equipes no mesmo cenário)
+# Agência à esquerda, a central (que distribui as tarefas) no meio, uma clínica à direita.
+# Cada agente circula só na própria ala e nas salas comuns liberadas para ela;
+# só os pares de "passagens" se ligam; cada ala tem sua porta em "entradas".
+# Use: copie para /data/office.yaml (ou KAISHA_EXAMPLE=alas na primeira subida).
+nome: Três Alas
+tema: auto
+planta: aberta
+formato: auto
+
+alas:
+  - { id: agencia, nome: Agência }
+  - { id: central, nome: Central }
+  - { id: clinica, nome: Clínica, apelidos: [consultorio], expediente: "seg-sex 08:00-17:00" }
+
+salas:
+  # ala da agência
+  - { id: jogos,        nome: Sala de jogos,       area: [0, 0, 10, 7],   piso: madeira_escura, parede: azul, comum: [agencia, central] }
+  - { id: agencia_reuniao,  nome: Reunião,         area: [0, 7, 10, 5],   piso: madeira, ala: agencia }
+  - { id: agencia_adm,      nome: Administrativo,  area: [0, 12, 10, 7],  piso: carpete_azul, ala: agencia }
+  # ala central
+  - { id: operacao,     nome: Operação,            area: [10, 0, 10, 7],  piso: carpete_verde, parede: escura, ala: central }
+  - { id: transcricao,  nome: Transcrição,         area: [20, 0, 4, 7],   piso: madeira, parede: escura, ala: central }
+  - { id: comando,      nome: Comando,             area: [10, 7, 10, 6],  piso: madeira_escura, ala: central }
+  - { id: copa,         nome: Copa,                area: [10, 13, 10, 6], piso: ladrilho, comum: [agencia, central] }
+  # ala da clínica
+  - { id: consultorio,  nome: Consultório,         area: [24, 0, 8, 7],   piso: carpete_verde, parede: verde, ala: clinica }
+  - { id: espera,       nome: Recepção da clínica, tipo: espera, area: [20, 7, 12, 6], piso: xadrez, ala: clinica }
+  - { id: erika_copa,   nome: Copa da clínica,     area: [20, 13, 5, 6],  piso: ladrilho, ala: clinica }
+  - { id: relax,        nome: Relaxamento,         area: [25, 13, 7, 6],  piso: carpete_verde, ala: clinica }
+
+agentes:
+  - { id: musashi,    nome: Musashi,        cargo: Central,     sala: comando,     mesa: [14, 9],  cor: vermelho, central: true }
+  - { id: sentinela,  nome: Sentinela,      cargo: Erros,        sala: comando,     mesa: [18, 9],  cor: cinza, inspetor: true }
+  - { id: agenda,     nome: Agenda,         cargo: Lembretes,    sala: operacao,    mesa: [11, 4],  cor: azul }
+  - { id: mensageiro, nome: Mensageiro,     cargo: Mensagens,    sala: operacao,    mesa: [14, 4],  cor: verde }
+  - { id: vigia,      nome: Vigia,          cargo: Grupos,       sala: operacao,    mesa: [17, 4],  cor: roxo }
+  - { id: escrivao,   nome: Escrivão,       cargo: Transcrição,  sala: transcricao, mesa: [21, 4],  cor: amarelo }
+  - { id: cadastro,   nome: Cadastro,       cargo: CRM e Asaas,  sala: agencia_adm,     mesa: [1, 14],  cor: laranja }
+  - { id: prontuario, nome: Prontuário,     cargo: Clientes,     sala: agencia_adm,     mesa: [4, 14],  cor: rosa }
+  - { id: caixa,      nome: Caixa,          cargo: Faturamento,  sala: agencia_adm,     mesa: [7, 14],  cor: verde }
+  - { id: doutora,    nome: Doutora,        cargo: Médica,       sala: consultorio, mesa: [27, 4],  cor: branco, penteado: longo }
+  - { id: secretaria, nome: Secretária,     cargo: Agenda,       sala: espera,      mesa: [21, 9],  cor: rosa, fica_na_sala: true, fica_na_mesa: true }
+
+moveis:
+  # sala de jogos (placar da agência)
+  - { tipo: janela,    pos: [1, 0] }
+  - { tipo: quadro,    pos: [7, 0], ala: agencia }
+  - { tipo: sinuca,    pos: [1, 3] }
+  - { tipo: pebolim,   pos: [6, 2] }
+  - { tipo: videogame, pos: [6, 4] }
+  - { tipo: planta,    pos: [9, 2] }
+  # reunião
+  - { tipo: mesa_reuniao, pos: [3, 8] }
+  - { tipo: planta,    pos: [9, 8] }
+  # administrativo
+  - { tipo: arquivo,   pos: [9, 13] }
+  - { tipo: impressora, pos: [8, 17] }
+  - { tipo: estante,   pos: [0, 16] }
+  # operação e transcrição (placar da central)
+  - { tipo: quadro,    pos: [11, 0] }
+  - { tipo: janela,    pos: [17, 0] }
+  - { tipo: relogio,   pos: [21, 0] }
+  - { tipo: estante,   pos: [23, 2] }
+  # comando
+  - { tipo: tapete,    pos: [13, 10] }
+  - { tipo: planta,    pos: [10, 7] }
+  # copa (agência + central)
+  - { tipo: cafe,      pos: [10, 13] }
+  - { tipo: bebedouro, pos: [11, 13] }
+  - { tipo: mesa_reuniao, pos: [14, 15] }
+  - { tipo: banheiro,  pos: [19, 13] }
+  - { tipo: sofa,      pos: [11, 17] }
+  # consultório (placar da clínica)
+  - { tipo: quadro,    pos: [24, 0] }
+  - { tipo: janela,    pos: [30, 0] }
+  - { tipo: estante,   pos: [31, 2] }
+  - { tipo: planta,    pos: [24, 5] }
+  # recepção da clínica (espera)
+  - { tipo: sofa,      pos: [25, 11] }
+  - { tipo: sofa,      pos: [28, 11] }
+  - { tipo: bebedouro, pos: [31, 8] }
+  - { tipo: planta,    pos: [24, 7] }
+  # copa só da clínica
+  - { tipo: cafe,      pos: [20, 14] }
+  - { tipo: bebedouro, pos: [21, 14] }
+  - { tipo: banheiro,  pos: [24, 14] }
+  - { tipo: planta,    pos: [20, 17] }
+  # relaxamento
+  - { tipo: sofa,      pos: [27, 14] }
+  - { tipo: tapete,    pos: [27, 16] }
+  - { tipo: planta,    pos: [31, 14] }
+
+passagens:
+  - [jogos, operacao]
+  - [jogos, agencia_reuniao]
+  - [agencia_reuniao, agencia_adm]
+  - [agencia_reuniao, comando]
+  - [agencia_adm, copa]
+  - [operacao, comando]
+  - [operacao, transcricao]
+  - [comando, copa]
+  - [comando, espera]
+  - [espera, consultorio]
+  - [espera, erika_copa]
+  - [espera, relax]
+
+entradas:
+  - { sala: agencia_reuniao, lado: esquerda }
+  - { sala: espera, lado: direita }
+  - { sala: copa, lado: baixo }

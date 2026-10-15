@@ -9,6 +9,7 @@ Cada agente tem uma mesa. Quando ele começa uma tarefa, o boneco digita, o moni
 
 - **Funciona com qualquer coisa** que faça uma chamada HTTP: n8n, scripts, cron, Claude Code, OpenClaw, seu backend.
 - **Escritório em um arquivo** (`office.yaml`): salas, mesas, móveis. Salvou, o painel muda na hora, sem recarregar a página.
+- **Várias equipes no mesmo cenário**: alas separadas (por exemplo, duas empresas e o agente que distribui as tarefas no meio), cada uma com suas salas, sua porta, seu horário e seu placar, tudo numa tela só.
 - **Decoração por data**: Natal, Festa Junina, Halloween e outras datas mudam o escritório sozinhas. Temas novos são uma pasta com um arquivo de texto.
 - **Pixel art com luz e sombra**: uma paleta só, contorno colorido, sombra no chão e a luz das janelas entrando de dia. Ao clicar num agente, aparece o retrato dele em card, com a inicial em neon. Tudo é gerado a partir das cores do agente, sem imagem externa.
 - **Leve**: Node.js 22, SQLite embutido, sem Redis, sem banco externo. Um volume para os dados.
@@ -125,9 +126,58 @@ curl -X POST https://kaisha.seudominio.com/api/visits \
 - Com `online: true` a visita não entra no escritório: aparece uma janela de vídeo na mesa do agente com a etiqueta "💻 … · online", e o agente fica em "Teleconsulta · …".
 - O painel pode ser aberto por outras pessoas: use um nome curto, como as iniciais, e nunca mande dado sensível.
 
+## Alas (várias equipes no mesmo andar)
+
+Para ver tudo numa tela só, divida o andar em **alas**: cada ala é uma equipe ou empresa, com salas, porta, horário e placar próprios. Os agentes de uma ala não circulam nas salas das outras.
+
+![Andar com três alas](docs/alas.png)
+
+```yaml
+alas:
+  - { id: agencia, nome: Agência }
+  - { id: central, nome: Central }
+  - { id: clinica, nome: Clínica, apelidos: [consultorio], expediente: "seg-sex 08:00-17:00" }
+
+salas:
+  - { id: jogos,     nome: Sala de jogos, area: [0, 0, 10, 7],  comum: [agencia, central] }
+  - { id: adm,       nome: Administrativo, area: [0, 7, 10, 12], ala: agencia }
+  - { id: operacao,  nome: Operação,       area: [10, 0, 10, 7], ala: central }
+  - { id: comando,   nome: Comando,        area: [10, 7, 10, 6], ala: central }
+  - { id: espera,    nome: Recepção, tipo: espera, area: [20, 7, 12, 6], ala: clinica }
+  # …
+
+passagens:          # só estes pares de salas se ligam; o resto é parede
+  - [jogos, operacao]
+  - [jogos, adm]
+  - [operacao, comando]
+  - [comando, espera]
+
+entradas:           # portas para fora: cada ala entra e sai pela sua
+  - { sala: adm,    lado: esquerda }
+  - { sala: espera, lado: direita }
+```
+
+O exemplo completo está em [`examples/alas.yaml`](examples/alas.yaml) (ou `KAISHA_EXAMPLE=alas` na primeira subida).
+
+- **Salas**: cada sala tem `ala: <id>`, ou `comum: true` (todas as alas usam), ou `comum: [agencia, central]` (só as alas listadas). O agente pertence à ala da sala onde fica a mesa dele. O editor do painel tem o bloco **Alas** (aba Escritório) e o campo **Ala** em cada sala.
+- **Circulação**: livre, o agente só vai a lugares da própria ala e das salas comuns liberadas para ela (água, banheiro, sofá, jogos, papo, almoço), e o caminho evita atravessar outras alas. O agente `central` não sai da mesa e o `inspetor` vai até quem deu erro em qualquer ala.
+- **Passagens**: com a lista `passagens` (só na planta aberta), apenas os pares listados ganham abertura. Sem a lista, toda divisa tem passagem, como antes.
+- **Entradas**: `lado` é `esquerda`, `direita`, `baixo` ou `cima`. A porta aparece na fachada com capacho e um caminho de calçada saindo pelo terreno. Cada agente chega e vai embora pela porta da sua ala; uma ala sem porta usa a de uma sala comum liberada para ela. As visitas entram pela porta da ala da sala de espera.
+- **Horário por ala**: `expediente`, `almoco` e `happy_hour` dentro da ala (sem eles, valem os do andar). A luz apaga e os agentes vão embora só na ala que fechou; as visitas seguem o horário da ala da sala de espera.
+- **Placar por ala**: cada `quadro` conta só as tarefas da ala da sala onde está (ou da indicada em `ala:` no próprio móvel, como `{ tipo: quadro, pos: [7, 0], ala: agencia }`). O total do andar aparece no topo.
+- **Atalhos**: no topo do painel aparecem **Tudo** e um botão por ala, que dá zoom na ala e deixa o resto na penumbra. O painel do agente mostra a ala dele.
+
+**API com alas**: o campo `andar` aceita também o id ou um `apelido` de uma ala, e o evento cai no andar dessa ala. `KAISHA_API_KEY_<ALA>` (o id ou o apelido em maiúsculas) escreve status, visitas e reações só dos agentes daquela ala e não muda a planta; `KAISHA_API_KEY` continua valendo para tudo. Um link `?andar=<ala>` abre o andar já com foco na ala.
+
+**De andares para alas**: dá para juntar andares separados num só sem mexer nos fluxos que mandam status.
+
+1. Faça backup do `/data` (no console do app: `cd /data && tar czf backup.tgz --exclude='backup*' .`).
+2. Monte o novo `office.yaml` com uma ala por andar antigo, dando à ala o mesmo id do andar (ou o id antigo em `apelidos`). Assim `"andar": "nef"` e `KAISHA_API_KEY_NEF` continuam funcionando.
+3. Renomeie os arquivos antigos de `/data/andares/` para `.bak` e reinicie. Na subida, o estado, o histórico, o placar e as visitas dos andares aposentados vão para as alas. `KAISHA_ANDARES` pode ficar: um andar que virou ala não é recriado.
+
 ## Andares (várias empresas no mesmo Kaisha)
 
-Cada andar é um escritório separado, com planta, agentes, placar do dia e chave próprios. Quando há mais de um, aparecem abas no topo do painel (`?andar=nef` abre direto um andar).
+Cada andar é um escritório separado, com planta, agentes, placar do dia e chave próprios. Quando há mais de um, aparecem abas no topo do painel (`?andar=nef` abre direto um andar). Para ver várias equipes ao mesmo tempo, prefira [alas](#alas-várias-equipes-no-mesmo-andar) num andar só.
 
 - O andar principal é o `/data/office.yaml` (id `principal`, ou o de `KAISHA_ANDAR_PRINCIPAL`).
 - Os outros são arquivos em `/data/andares/<id>.yaml`, no mesmo formato. Dá para criar copiando um arquivo para lá, pelo botão **Novo andar** do editor (com a chave geral) ou com `KAISHA_ANDARES=nef,consultorio`, que cria os andares que faltam a partir de [`examples/andares`](examples/andares). Nesse caso, os agentes do exemplo que estavam no andar principal mudam de andar junto com o histórico.
@@ -162,7 +212,7 @@ Datas móveis (Carnaval, Páscoa, Black Friday) são calculadas a cada ano. Para
 | `TZ` | `America/Sao_Paulo` | fuso dos temas e horários |
 | `KAISHA_LANG` | `pt-BR` | idioma da interface (`pt-BR` ou `en`) |
 | `KAISHA_ANDARES` | vazio | andares para criar a partir de `examples/andares` (ex.: `nef,consultorio`) |
-| `KAISHA_API_KEY_<ANDAR>` | vazio | chave que só escreve naquele andar (ex.: `KAISHA_API_KEY_NEF`) |
+| `KAISHA_API_KEY_<ANDAR>` | vazio | chave que só escreve naquele andar, ou só nos agentes daquela ala (ex.: `KAISHA_API_KEY_NEF`) |
 | `KAISHA_ANDAR_PRINCIPAL` | `principal` | id do andar do `office.yaml` |
 | `PORT` | `3000` | porta HTTP |
 
