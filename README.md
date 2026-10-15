@@ -89,7 +89,7 @@ datas_especiais:
 
 As chaves podem ser em português ou inglês (`salas`/`rooms`, `agentes`/`agents`…). Um arquivo com erro não derruba nada: o escritório anterior continua e o erro aparece num aviso na tela. Exemplo completo e comentado em [`examples/office.yaml`](examples/office.yaml).
 
-**Ficar na mesa ou na sala**: `fica_na_mesa: true` deixa o agente sempre sentado (como o central, mas sem distribuir tarefas); `fica_na_sala: true` faz ele passear só dentro da própria sala. `penteado: longo` (ou `curto`) escolhe o cabelo do boneco.
+**Ficar na mesa ou na sala**: `fica_na_mesa: true` deixa o agente sempre sentado (como o central, mas sem distribuir tarefas); `fica_na_sala: true` faz ele passear só dentro da própria sala. `penteado: longo` (ou `curto`) escolhe o cabelo do boneco. `monitores: 2` ou `3` troca a mesa por uma mesa de comando, mais larga; o agente `central` já ganha 3 monitores sem precisar do campo (use `monitores: 1` para voltar à mesa comum).
 
 **Planta aberta** (`planta: aberta`): em vez de salas fechadas, o escritório vira um salão só. Só as áreas encostadas no fundo têm parede; entre as outras entram divisórias baixas com uma passagem no meio de cada divisa. Veja [`examples/musashi.yaml`](examples/musashi.yaml).
 

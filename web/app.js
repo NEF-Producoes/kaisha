@@ -120,7 +120,7 @@ function buildNav() {
     if (['cafe', 'bebedouro', 'sofa', 'planta', 'estante', 'arquivo', 'impressora', 'mesa_reuniao'].includes(key))
       for (let x = 0; x < tw; x++) { pois.push([f.pos[0] + x, f.pos[1] + th]); if (key === 'cafe' || key === 'bebedouro') cafes.push([f.pos[0] + x, f.pos[1] + th]); }
   }
-  for (const d of desks) for (const dx of [0, 1]) { block(d.x + dx, d.y); block(d.x + dx, d.y - 1); }
+  for (const d of desks) for (const dx of monitores(d.agent) > 1 ? [-1, 0, 1, 2] : [0, 1]) { block(d.x + dx, d.y); block(d.x + dx, d.y - 1); }
   // lugares das vontades: água/café, sofás (fora da sala de espera), banheiros e estantes
   const ok = (x, y) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x];
   const espera = rooms.findIndex((r) => r.kind === 'waiting');
@@ -319,7 +319,11 @@ function buildStatic() {
     s.restore();
   }
   // mesas
-  for (const d of desks) { sombraChao(s, d.x * T + 16, d.y * T + 15, 15, 2, 0.3); furniture('mesa').draw(s, d.x * T, d.y * T); }
+  for (const d of desks) {
+    const larga = monitores(d.agent) > 1; // mesa de comando: 3 blocos, centrada no lugar da mesa comum
+    sombraChao(s, d.x * T + 16, d.y * T + 15, larga ? 23 : 15, 2, 0.3);
+    if (larga) furniture('mesa_comando').draw(s, d.x * T - 8, d.y * T); else furniture('mesa').draw(s, d.x * T, d.y * T);
+  }
   // enfeites fixos do tema (os de parede pulam os blocos ocupados por janela, quadro, relógio…)
   const wallBusy = (cx, r) => items.some(({ f, def }) => f.pos[1] < r.y + 2 && f.pos[1] + def.h / T > r.y && cx >= f.pos[0] - 1 && cx < f.pos[0] + def.w / T + 1);
   rooms.forEach((r, ri) => {
@@ -360,6 +364,8 @@ const statusOf = (id) => {
 const ATIVO = new Set(['working', 'waiting', 'error']);
 // quem não sai da mesa: o agente central (distribui as tarefas) e quem tem "fica na mesa"
 const naMesa = (a) => !!(a.central || a.fixed);
+// monitores na mesa: o campo monitores do YAML; sem ele, 3 para o central (mesa de comando) e 1 para os outros
+const monitores = (a) => a.monitors || (a.central ? 3 : 1);
 
 // ---------- os agentes andando pelo escritório ----------
 // modos: seated (na mesa), pause (parado em pé), walk (passeando), ring (celular tocando), run (correndo para a mesa)
@@ -1276,7 +1282,13 @@ function frame(t) {
   desenhaJogos();
   const heads = decorations('head');
   // monitores (o status aparece na tela mesmo com o agente a caminho)
-  for (const e of state.ents.values()) drawMonitor(g, e.desk.x * T + 8, e.desk.y * T - 8, statusOf(e.id), tick + (hashStr(e.id) % 7));
+  for (const e of state.ents.values()) {
+    const st = statusOf(e.id), tk = tick + (hashStr(e.id) % 7), x0 = e.desk.x * T, y0 = e.desk.y * T, n = monitores(e.agent);
+    // os monitores dos lados ficam um pixel mais baixos, como se estivessem virados para o agente
+    if (n === 3) { drawMonitor(g, x0 - 7, y0 - 7, st, tk + 3); drawMonitor(g, x0 + 23, y0 - 7, st, tk + 5); drawMonitor(g, x0 + 8, y0 - 8, st, tk); }
+    else if (n === 2) { drawMonitor(g, x0, y0 - 8, st, tk); drawMonitor(g, x0 + 16, y0 - 8, st, tk + 4); }
+    else drawMonitor(g, x0 + 8, y0 - 8, st, tk);
+  }
   // cadeiras vazias e agentes, de cima para baixo
   const desenhos = [];
   for (const e of state.ents.values()) sombraChao(g, e.desk.x * T + 16, e.desk.y * T + 27, 6, 1, 0.3);

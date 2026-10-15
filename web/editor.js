@@ -146,7 +146,9 @@ export function initEditor({ state, rebuild, canvas, applySnapshot, api = (p) =>
           el('div', { class: 'ed-row' },
             marca(a.fixed, 'Fica na mesa', (v) => { a.fixed = v; mudou(); }),
             marca(a.stay, 'Fica na própria sala', (v) => { a.stay = v; mudou(); })),
-          campo('Cabelo', escolha(a.hairstyle || '', [['', 'automático'], ['short', 'curto'], ['long', 'longo']], (v) => { a.hairstyle = v || null; mudou(); })),
+          el('div', { class: 'ed-row' },
+            campo('Cabelo', escolha(a.hairstyle || '', [['', 'automático'], ['short', 'curto'], ['long', 'longo']], (v) => { a.hairstyle = v || null; mudou(); })),
+            campo('Monitores', escolha(String(a.monitors || ''), [['', 'automático'], ['1', '1'], ['2', '2'], ['3', '3']], (v) => { a.monitors = v ? Number(v) : null; mudou(); }))),
           el('button', { class: 'btn danger', type: 'button', onclick: (e) => { e.stopPropagation(); o.agents.splice(i, 1); sel = null; mudou(); render(); } }, 'Remover agente')));
       });
     }
