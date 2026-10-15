@@ -109,6 +109,15 @@ export function walkerSprite(look, facing, frame) {
   });
 }
 
+// sentado de frente (sofá): cabeça e tronco iguais aos de pé, pernas dobradas para a frente
+export function sittingSprite(look) {
+  return cached(`st:${look.hair}:${look.skin}:${look.shirt[0]}:${look.style}:${look.long ? 'L' : ''}`, () => {
+    const torso = look.long ? LONGO_FRENTE(TORSO.front) : TORSO.front;
+    const pernas = ['...PPPPPPPPPP...', '...PPPP..PPPP...', '...BBB....BBB...'];
+    return sprite([...FRONT_HEADS[look.style], ...torso, ...pernas], { H: look.hair, S: look.skin, C: look.shirt[0], c: look.shirt[1], P: '#3a3f4b', B: '#1f2228', e: '#1f2228', m: '#b5655a' });
+  });
+}
+
 // celular tocando (notificação de tarefa) e envelope (tarefa saindo da recepção)
 export const phoneSprite = () => cached('phone', () => sprite(['KKKKKK', 'KwwwwK', 'KwggwK', 'KwggwK', 'KwwwwK', 'KwwwwK', 'KKyyKK', 'KKKKKK'], { K: '#22252b', w: '#7fd1ff', g: '#4fa66a', y: '#5a6069' }));
 export const mailSprite = () => cached('mail', () => sprite(['WWWWWWW', 'WbWWWbW', 'WWbWbWW', 'WWWbWWW', 'WWWWWWW'], { W: '#f7f3ea', b: '#c0504d' }));
@@ -153,9 +162,13 @@ export const FURNITURE = {
   tapete: { w: 48, h: 32, draw: (g, x, y) => { R(g, '#b2564b', x, y, 48, 32); R(g, '#c96a5e', x + 3, y + 3, 42, 26); R(g, '#d98f6f', x + 8, y + 8, 32, 16); } },
   // porta do banheiro: placa com os bonequinhos; a luz de livre/ocupado é pintada por cima, ao vivo
   banheiro: { w: 16, h: 32, draw: (g, x, y) => { R(g, '#5b3b24', x + 1, y + 2, 14, 30); R(g, '#8a5a36', x + 2, y + 3, 12, 29); R(g, '#a5703f', x + 2, y + 3, 12, 1); R(g, '#7a4e2e', x + 4, y + 13, 8, 7); R(g, '#7a4e2e', x + 4, y + 23, 8, 7); R(g, '#e8eef5', x + 3, y + 5, 8, 6); R(g, '#4a7fd4', x + 4, y + 6, 1, 1); R(g, '#4a7fd4', x + 4, y + 7, 2, 3); R(g, '#d9534f', x + 8, y + 6, 1, 1); R(g, '#d9534f', x + 7, y + 7, 3, 3); R(g, '#9aa3ad', x + 6, y + 6, 1, 4); R(g, '#f2c14e', x + 12, y + 19, 1, 2); } },
+  // jogos: a mesa/tela é desenhada aqui; bolas, bonecos e a tela do videogame se mexem por cima, ao vivo
+  sinuca: { w: 48, h: 32, draw: (g, x, y) => { R(g, '#4a301d', x + 3, y + 26, 4, 5); R(g, '#4a301d', x + 41, y + 26, 4, 5); R(g, '#5b3b24', x, y + 4, 48, 23); R(g, '#7a4e2e', x + 1, y + 5, 46, 21); R(g, '#8a5a36', x + 1, y + 5, 46, 1); R(g, '#2f8f4f', x + 4, y + 8, 40, 15); R(g, '#277a43', x + 4, y + 8, 40, 1); R(g, '#277a43', x + 4, y + 8, 1, 15); for (const [px, py] of [[3, 7], [22, 6], [41, 7], [3, 21], [22, 22], [41, 21]]) R(g, '#15181d', x + px, y + py, 4, 3); R(g, '#3a7d55', x + 14, y + 8, 1, 15); } },
+  pebolim: { w: 32, h: 16, draw: (g, x, y) => { R(g, '#4a301d', x + 2, y + 13, 3, 3); R(g, '#4a301d', x + 27, y + 13, 3, 3); R(g, '#6e472b', x, y + 1, 32, 13); R(g, '#8a5a36', x, y + 1, 32, 1); R(g, '#3f9a55', x + 2, y + 3, 28, 9); R(g, '#e8f1ea', x + 15, y + 3, 1, 9); R(g, '#e8f1ea', x + 2, y + 6, 1, 3); R(g, '#e8f1ea', x + 29, y + 6, 1, 3); for (const rx of [6, 11, 20, 25]) R(g, '#c9cdd2', x + rx, y, 1, 15); } },
+  videogame: { w: 32, h: 24, draw: (g, x, y) => { R(g, '#3a2f28', x + 1, y + 16, 30, 7); R(g, '#4d3e33', x + 1, y + 16, 30, 1); R(g, '#2a221d', x + 3, y + 22, 3, 2); R(g, '#2a221d', x + 26, y + 22, 3, 2); R(g, '#15181d', x + 2, y + 1, 28, 15); R(g, '#22262e', x + 3, y + 2, 26, 13); R(g, '#15181d', x + 14, y + 15, 4, 2); R(g, '#e6e6e6', x + 5, y + 18, 7, 3); R(g, '#4fa66a', x + 10, y + 19, 1, 1); R(g, '#3b3f46', x + 20, y + 19, 4, 2); R(g, '#3b3f46', x + 25, y + 19, 4, 2); } },
   cafe: { w: 16, h: 24, draw: (g, x, y) => { R(g, '#3a3f4b', x + 2, y + 2, 12, 20); R(g, '#5a6069', x + 3, y + 3, 10, 6); R(g, '#e6e6e6', x + 6, y + 13, 4, 4); R(g, '#d9534f', x + 11, y + 4, 1, 1); } },
 };
-const FURN_ALIAS = { bookshelf: 'estante', plant: 'planta', clock: 'relogio', window: 'janela', kanban: 'quadro', board: 'quadro', chart: 'grafico', water: 'bebedouro', cooler: 'bebedouro', cabinet: 'arquivo', couch: 'sofa', meeting_table: 'mesa_reuniao', printer: 'impressora', rug: 'tapete', coffee: 'cafe', wc: 'banheiro', bathroom: 'banheiro', toilet: 'banheiro', restroom: 'banheiro', relógio: 'relogio', gráfico: 'grafico', café: 'cafe', desk: 'mesa' };
+const FURN_ALIAS = { bookshelf: 'estante', plant: 'planta', clock: 'relogio', window: 'janela', kanban: 'quadro', board: 'quadro', chart: 'grafico', water: 'bebedouro', cooler: 'bebedouro', cabinet: 'arquivo', couch: 'sofa', meeting_table: 'mesa_reuniao', printer: 'impressora', rug: 'tapete', coffee: 'cafe', wc: 'banheiro', pool: 'sinuca', bilhar: 'sinuca', snooker: 'sinuca', foosball: 'pebolim', totó: 'pebolim', toto: 'pebolim', game: 'videogame', tv: 'videogame', console: 'videogame', bathroom: 'banheiro', toilet: 'banheiro', restroom: 'banheiro', relógio: 'relogio', gráfico: 'grafico', café: 'cafe', desk: 'mesa' };
 export const furniture = (type) => FURNITURE[type] || FURNITURE[FURN_ALIAS[type]] || null;
 
 // ---------- monitor ----------

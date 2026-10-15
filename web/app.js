@@ -1,6 +1,6 @@
 // Kaisha · escritório no navegador
 import { initEditor } from './editor.js?v=__V__';
-import { T, sprite, cached, agentLook, agentSprite, walkerSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr } from './sprites.js?v=__V__';
+import { T, sprite, cached, agentLook, agentSprite, walkerSprite, sittingSprite, phoneSprite, mailSprite, emptyChair, FLOORS, WALLS, furniture, furnitureKey, WALL_FURNITURE, FLAT_FURNITURE, drawMonitor, hashStr } from './sprites.js?v=__V__';
 
 const I18N = {
   'pt-BR': {
@@ -10,7 +10,7 @@ const I18N = {
     ago: (s) => (s < 60 ? 'agora' : s < 3600 ? `há ${Math.floor(s / 60)} min` : s < 86400 ? `há ${Math.floor(s / 3600)} h` : `há ${Math.floor(s / 86400)} d`),
     theme: 'Tema', agents: 'agentes', today: 'HOJE', success: 'Sucesso', question: 'Pergunta', inWaiting: 'na espera',
     needs: { sede: 'Sede', banheiro: 'Banheiro', social: 'Papo', diversao: 'Diversão', cansaco: 'Cansaço' },
-    doing: { beber: 'tomando um café ou água', banheiro: 'no banheiro', celular: 'no celular, no sofá', ler: 'lendo um livro', cochilar: 'cochilando no sofá', papo: 'batendo papo', indo: 'indo', livre: 'à toa', mesa: 'trabalhando na mesa', fixo: 'não sai da mesa' }, now: 'Agora',
+    doing: { beber: 'tomando um café ou água', banheiro: 'no banheiro', celular: 'no celular, no sofá', ler: 'lendo um livro', cochilar: 'cochilando no sofá', papo: 'batendo papo', jogo_sinuca: 'jogando sinuca', jogo_pebolim: 'jogando pebolim', jogo_videogame: 'jogando videogame', indo: 'indo', livre: 'à toa', mesa: 'trabalhando na mesa', fixo: 'não sai da mesa' }, now: 'Agora', wins: 'Vitórias hoje',
   },
   en: {
     working: 'Working', waiting: 'Waiting', idle: 'Idle', error: 'Error', offline: 'Offline',
@@ -19,7 +19,7 @@ const I18N = {
     ago: (s) => (s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`),
     theme: 'Theme', agents: 'agents', today: 'TODAY', success: 'Success', question: 'Question', inWaiting: 'waiting room',
     needs: { sede: 'Thirst', banheiro: 'Bathroom', social: 'Chat', diversao: 'Fun', cansaco: 'Tiredness' },
-    doing: { beber: 'having coffee or water', banheiro: 'in the bathroom', celular: 'on the phone, on the couch', ler: 'reading a book', cochilar: 'napping on the couch', papo: 'chatting', indo: 'on the way', livre: 'idling', mesa: 'working at the desk', fixo: 'stays at the desk' }, now: 'Now',
+    doing: { beber: 'having coffee or water', banheiro: 'in the bathroom', celular: 'on the phone, on the couch', ler: 'reading a book', cochilar: 'napping on the couch', papo: 'chatting', jogo_sinuca: 'playing pool', jogo_pebolim: 'playing foosball', jogo_videogame: 'playing video games', indo: 'on the way', livre: 'idling', mesa: 'working at the desk', fixo: 'stays at the desk' }, now: 'Now', wins: 'Wins today',
   },
 };
 let L = I18N['pt-BR'];
@@ -116,7 +116,7 @@ function buildNav() {
   // lugares das vontades: água/café, sofás (fora da sala de espera), banheiros e estantes
   const ok = (x, y) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x];
   const espera = rooms.findIndex((r) => r.kind === 'waiting');
-  const lugares = { agua: [], sofas: [], banheiros: [], estantes: [] };
+  const lugares = { agua: [], sofas: [], banheiros: [], estantes: [], jogos: [] };
   (state.snap.office.furniture || []).forEach((f, fi) => {
     const key = furnitureKey(f.type), def = key && furniture(key);
     if (!def) return;
@@ -131,6 +131,15 @@ function buildNav() {
     if (key === 'banheiro') {
       const fx = [f.pos[0], f.pos[0] + tw - 1].find((x) => ok(x, fy));
       if (fx != null) lugares.banheiros.push({ id: fi, frente: fy * W + fx, x: f.pos[0], y: f.pos[1] });
+    }
+    // jogos: onde cada jogador fica (e para onde olha)
+    if (key === 'sinuca' || key === 'pebolim' || key === 'videogame') {
+      const X = f.pos[0], Y = f.pos[1];
+      const cands = key === 'sinuca' ? [[[X - 1, Y + 1, 'right'], [X - 1, Y, 'right']], [[X + 3, Y + 1, 'left'], [X + 3, Y, 'left'], [X + 1, Y + 2, 'up']]]
+        : key === 'pebolim' ? [[[X - 1, Y, 'right']], [[X + 2, Y, 'left']]]
+        : [[[X, Y + 2, 'up']], [[X + 1, Y + 2, 'up']]];
+      const spots = cands.map((l) => l.find(([x, y]) => ok(x, y))).filter(Boolean).map(([x, y, facing]) => ({ tile: y * W + x, facing }));
+      if (spots.length >= (key === 'pebolim' ? 2 : 1)) lugares.jogos.push({ id: fi, tipo: key, x: X, y: Y, spots });
     }
   });
   // passagens: em planta aberta, cada divisa entre duas salas ganha uma abertura de 2 blocos no meio
@@ -171,6 +180,7 @@ function buildNav() {
   }
   state.nav = { W, H, floor, wallRow, walk, doors, edges, pass, comp, comps, pois: pois.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x),
     cafes: cafes.filter(([x, y]) => x >= 0 && y >= 0 && x < W && y < H && walk[y * W + x]).map(([x, y]) => y * W + x), lugares };
+  state.jogos = new Map();
   state.slots = new Map(); // lugar reservado -> agente (um por cadeira de sofá, ponto do bebedouro, banheiro…)
 }
 function vizinhos(i, W, H) {
@@ -460,7 +470,7 @@ function decidir(e) {
   if (v.sede > VONTADE) opcoes.push(['beber', v.sede]);
   if (v.cansaco > 70) opcoes.push(['cochilar', v.cansaco - 5]);
   if (v.social > VONTADE) opcoes.push(['papo', v.social]);
-  if (v.diversao > VONTADE) opcoes.push(['celular', v.diversao], ['ler', v.diversao - 12]);
+  if (v.diversao > VONTADE) opcoes.push(['jogar', v.diversao + 8], ['celular', v.diversao], ['ler', v.diversao - 12]);
   // um pouco de sorte para ninguém ficar previsível demais
   const ordem = opcoes.map(([t, p]) => [t, p + Math.random() * 15]).sort((a, b) => b[1] - a[1]);
   for (const [tipo] of ordem) if (comecar(e, tipo)) return;
@@ -470,6 +480,7 @@ function comecar(e, tipo) {
   const L2 = state.nav.lugares, aqui = blocoDe(e.x, e.y);
   const area = new Set(areaDoAgente(e, aqui));
   if (tipo === 'papo') return comecarPapo(e, aqui, area);
+  if (tipo === 'jogar') return comecarJogo(e, aqui, area);
   let alvos = [];
   if (tipo === 'beber') alvos = L2.agua.map((a) => ({ key: 'a:' + a.tile, tile: a.tile, extra: { bebida: a.tipo } }));
   else if (tipo === 'banheiro') alvos = L2.banheiros.map((b) => ({ key: 'wc:' + b.id, tile: b.frente, extra: { wc: b } }));
@@ -516,6 +527,19 @@ function chegouAtividade(e) {
   else if (a.tipo === 'banheiro') { e.timer = rnd(14000, 26000); e.oculto = true; }
   else if (a.tipo === 'celular' || a.tipo === 'cochilar') { e.x = a.sofa.px; e.y = a.sofa.py; e.facing = 'down'; e.timer = a.tipo === 'cochilar' ? rnd(20000, 40000) : rnd(15000, 30000); }
   else if (a.tipo === 'ler') { e.timer = rnd(10000, 18000); e.facing = 'down'; }
+  else if (a.tipo === 'jogar') {
+    const j = state.jogos.get(a.jogo);
+    if (!j) { e.atv = null; e.mode = 'pause'; e.timer = rnd(800, 2000); return; }
+    const sp = j.lugar.spots[a.lado];
+    Object.assign(e, centroBloco(sp.tile), { facing: sp.facing });
+    e.timer = 45000; // espera o parceiro chegar
+    j.prontos.add(e.id);
+    if (j.jogadores.every((id) => j.prontos.has(id))) {
+      const dur = rnd(20000, 40000);
+      j.inicio = Date.now(); j.fim = j.inicio + dur;
+      for (const id of j.jogadores) { const p = state.ents.get(id); if (p) p.timer = dur; }
+    }
+  }
   else if (a.tipo === 'papo') {
     const o = state.ents.get(a.com);
     if (!o || !o.atv || o.atv.com !== e.id || o.mode !== 'atividade') { e.atv = null; e.mode = 'pause'; e.timer = rnd(800, 2000); return; }
@@ -533,6 +557,15 @@ function terminar(e) {
   const a = e.atv;
   if (!a) return;
   if (a.key && state.slots.get(a.key) === e.id) state.slots.delete(a.key);
+  if (a.jogo != null) {
+    // saiu no meio: o jogo acaba para todo mundo
+    const j = state.jogos.get(a.jogo);
+    state.jogos.delete(a.jogo); state.slots.delete('g:' + a.jogo);
+    if (j) for (const id of j.jogadores) {
+      const o = id !== e.id && state.ents.get(id);
+      if (o && o.atv && o.atv.jogo === a.jogo) { o.atv = null; o.indo = false; if (o.mode === 'atividade' || o.mode === 'walk') { o.mode = 'pause'; o.path = []; o.timer = rnd(800, 2500); } }
+    }
+  }
   if (a.sofa && e.mode === 'atividade') Object.assign(e, centroBloco(a.sofa.frente));
   if (a.wc && e.oculto) Object.assign(e, centroBloco(a.wc.frente), { facing: 'down' });
   if (a.com) {
@@ -543,6 +576,7 @@ function terminar(e) {
 }
 function concluir(e) {
   const a = e.atv, v = e.vont;
+  if (a && a.tipo === 'jogar') { fimDeJogo(e); return; }
   if (a && v) {
     if (a.tipo === 'beber') { v.sede = rnd(0, 8); v.banheiro = Math.min(100, v.banheiro + 30); if (a.bebida === 'cafe') v.cansaco = Math.max(0, v.cansaco - 25); }
     else if (a.tipo === 'banheiro') v.banheiro = rnd(0, 5);
@@ -556,7 +590,62 @@ function concluir(e) {
   terminar(e);
   e.mode = 'pause'; e.timer = rnd(1500, 4000);
 }
-const FAZENDO = { beber: 'beber', banheiro: 'banheiro', celular: 'celular', ler: 'ler', cochilar: 'cochilar', papo: 'papo', esperaPapo: 'papo' };
+// ---------- jogos (sinuca, pebolim, videogame) ----------
+// quem tem vontade de se divertir chama outro agente livre; pebolim só com dois, sinuca e videogame dá para jogar sozinho
+state.jogos = new Map(); // id do móvel -> { lugar, jogadores, prontos, inicio, fim }
+function comecarJogo(e, aqui, area) {
+  const L2 = state.nav.lugares;
+  const parceiros = [...state.ents.values()].filter((o) => o !== e && !o.atv && o.vont && !naMesa(o.agent) && ['pause', 'walk'].includes(o.mode) && !ATIVO.has(statusOf(o.id)))
+    .sort((a, b) => (b.vont.diversao + b.vont.social / 2) - (a.vont.diversao + a.vont.social / 2));
+  const opcoes = L2.jogos.filter((j) => !state.slots.has('g:' + j.id) && area.has(j.spots[0].tile)).sort(() => Math.random() - 0.5);
+  for (const j of opcoes) {
+    const p0 = caminho(aqui, j.spots[0].tile);
+    if (!p0) continue;
+    // parceiro: alguém que alcance o outro lado (o primeiro da fila de quem mais quer)
+    let par = null, p1 = null;
+    if (j.spots.length > 1) for (const o of parceiros.slice(0, 3)) {
+      const ot = blocoDe(o.x, o.y);
+      if (!new Set(areaDoAgente(o, ot)).has(j.spots[1].tile)) continue;
+      const c = caminho(ot, j.spots[1].tile);
+      if (c) { par = o; p1 = c; break; }
+    }
+    if (!par && j.tipo === 'pebolim') continue;
+    const jogo = { lugar: j, jogadores: par ? [e.id, par.id] : [e.id], prontos: new Set(), inicio: 0, fim: 0 };
+    state.jogos.set(j.id, jogo); state.slots.set('g:' + j.id, e.id);
+    e.atv = { tipo: 'jogar', jogo: j.id, jogoTipo: j.tipo, lado: 0 };
+    e.path = p0; e.mode = 'walk'; e.poi = false; e.indo = true;
+    if (par) { par.atv = { tipo: 'jogar', jogo: j.id, jogoTipo: j.tipo, lado: 1 }; par.path = p1; par.mode = 'walk'; par.poi = false; par.indo = true; }
+    return true;
+  }
+  return false;
+}
+// fim natural: sorteia quem ganhou, comemora, conta a vitória do dia e todo mundo volta a ficar livre
+function fimDeJogo(e) {
+  const a = e.atv, j = state.jogos.get(a.jogo);
+  const ids = j ? j.jogadores : [e.id];
+  const comecou = j && j.inicio;
+  const vencedor = comecou && ids.length > 1 ? ids[(Math.random() * ids.length) | 0] : null;
+  const agora = Date.now();
+  for (const id of ids) {
+    const p = state.ents.get(id);
+    if (!p || !p.atv || p.atv.jogo !== a.jogo) continue;
+    if (comecou && p.vont) { p.vont.diversao = rnd(0, 8); if (ids.length > 1) p.vont.social = Math.max(0, p.vont.social - 30); p.vont.cansaco = Math.max(0, p.vont.cansaco - 5); }
+    if (comecou) p.reacao = { emoji: !vencedor ? '😎' : id === vencedor ? '🏆' : ['😤', '😩', '🙃'][hashStr(id + agora) % 3], ate: agora + 3000 };
+    if (id === vencedor) contarVitoria(id, a.jogoTipo);
+    p.atv = null; p.indo = false; p.mode = 'pause'; p.timer = rnd(2500, 4500); p.path = [];
+  }
+  state.jogos.delete(a.jogo); state.slots.delete('g:' + a.jogo);
+}
+// vitórias do dia (guardadas neste navegador)
+const chaveVitorias = () => 'kaisha_vitorias_' + (ANDAR || 'principal') + '_' + new Date().toLocaleDateString('sv');
+function lerVitorias() { try { return JSON.parse(localStorage.getItem(chaveVitorias()) || '{}'); } catch { return {}; } }
+function contarVitoria(id, tipo) {
+  const v = lerVitorias();
+  v[id] = v[id] || {}; v[id][tipo] = (v[id][tipo] || 0) + 1;
+  try { localStorage.setItem(chaveVitorias(), JSON.stringify(v)); } catch {}
+}
+
+const FAZENDO = { beber: 'beber', banheiro: 'banheiro', celular: 'celular', ler: 'ler', cochilar: 'cochilar', papo: 'papo', esperaPapo: 'papo', jogar: 'jogar' };
 
 // erro: o inspetor (ex.: Sentinela) vai até a mesa de quem falhou
 function chamarInspetor(alvo) {
@@ -905,6 +994,7 @@ function frame(t) {
   g.setTransform(state.scale, 0, 0, state.scale, 0, 0);
   g.drawImage(state.staticLayer, 0, 0);
   luzesBanheiro();
+  desenhaJogos();
   const heads = decorations('head');
   // monitores (o status aparece na tela mesmo com o agente a caminho)
   for (const e of state.ents.values()) drawMonitor(g, e.desk.x * T + 8, e.desk.y * T - 8, statusOf(e.id), tick + (hashStr(e.id) % 7));
@@ -943,11 +1033,22 @@ function desenhaAgente(e, heads) {
     // comemorando: pulinhos
     const quica = e.mode === 'celebrate' ? -Math.round(Math.abs(Math.sin(e.step * 7)) * 7) : andando && fr === 1 ? -1 : 0;
     const x = Math.round(e.x - 8), y = Math.round(e.y - 20 + quica);
-    const noSofa = e.mode === 'atividade' && e.atv && e.atv.sofa;
-    if (!noSofa) { g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2); }
-    g.drawImage(walkerSprite(e.look, e.facing, fr), x, y);
-    topo = y;
-    if (e.mode === 'atividade' && e.atv) desenhaAtividade(e, x, y);
+    const atv = e.mode === 'atividade' && e.atv;
+    const noSofa = atv && e.atv.sofa;
+    const naTv = atv && e.atv.jogoTipo === 'videogame';
+    if (noSofa) { g.drawImage(sittingSprite(e.look), x, y + 2); topo = y + 2; }
+    else if (naTv) {
+      // sentado de costas na cadeira gamer; com o jogo rolando, aperta os botões sem parar
+      const j = state.jogos.get(e.atv.jogo);
+      topo = Math.round(e.y) - 18;
+      g.drawImage(agentSprite(e.look, j && j.inicio ? (tick % 2) + 1 : 0), x, topo);
+    } else {
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 3, Math.round(e.y) - 1, 10, 2);
+      g.drawImage(walkerSprite(e.look, e.facing, fr), x, y);
+      topo = y;
+    }
+    if (atv) desenhaAtividade(e, x, topo);
+    if (e.reacao && e.reacao.ate > Date.now()) balao(x + 8, topo, e.reacao.emoji);
     if (e.mode === 'celebrate') bracosParaCima(x, y, e.look);
     if (e.mode === 'inspect') lupa(Math.round(e.x) + 5, y + 7);
     if (e.mode === 'ring') {
@@ -987,6 +1088,18 @@ function desenhaAtividade(e, x, y) {
   } else if (a.tipo === 'ler') {
     const capa = ['#c0504d', '#4f81bd', '#9bbb59', '#8064a2'][hashStr(e.id) % 4];
     pinta(x + 3, y + 10, 10, 5, capa); pinta(x + 4, y + 10, 4, 4, '#f7f3ea'); pinta(x + 8, y + 10, 4, 4, '#f7f3ea'); pinta(x + 8, y + 10, 1, 5, capa);
+  } else if (a.tipo === 'jogar') {
+    const j = state.jogos.get(a.jogo);
+    if (!j) return;
+    if (!j.inicio) { if (Math.floor(Date.now() / 1500) % 2) balao(x + 8, y, { sinuca: '🎱', pebolim: '⚽', videogame: '🎮' }[a.jogoTipo]); return; }
+    if (a.jogoTipo === 'sinuca') {
+      // taco: na vez dele, puxa e dá a tacada
+      const t = (Date.now() - j.inicio) / 2600, vez = Math.floor(t) % j.jogadores.length === a.lado, f = t % 1;
+      const recuo = vez && f < 0.3 ? Math.round(f * 12) : vez && f < 0.36 ? -2 : 0;
+      const d = e.facing === 'right' ? 1 : e.facing === 'left' ? -1 : 0;
+      if (d) { for (let k = 0; k < 14; k++) pinta(x + 8 + d * (2 + k - recuo), y + 13 - (k >> 3), 1, 1, k > 11 ? '#f7f3ea' : '#c9a46a'); }
+      else for (let k = 0; k < 12; k++) pinta(x + 8, y + 8 - k + recuo, 1, 1, k > 9 ? '#f7f3ea' : '#c9a46a');
+    }
   } else if (a.tipo === 'papo' && a.assuntos) {
     // falam um de cada vez
     const fase = Math.floor((Date.now() - (e.inicio || 0)) / 1800);
@@ -1002,6 +1115,56 @@ function balao(cx, topo, emoji) {
   g.fillStyle = '#1b1f27';
   g.fillText(emoji, bx + 7, by + 6);
 }
+// partes que se mexem nos jogos: bolas da sinuca, bola e bonecos do pebolim, tela do videogame
+const tri = (v) => { const f = v % 2; return f < 1 ? f : 2 - f; };
+function posBola(lj, k, i) {
+  const X = lj.x * T, Y = lj.y * T;
+  if (k <= 0) { // arrumadas: branca à esquerda, triângulo à direita
+    if (i === 0) return [X + 12, Y + 14];
+    const tri3 = [[0, 0], [2, -1], [2, 1], [4, -2], [4, 0], [4, 2]][i - 1];
+    return [X + 30 + tri3[0], Y + 14 + tri3[1] * 2];
+  }
+  const h = hashStr(`${lj.id}:${k}:${i}`);
+  return [X + 5 + (h % 37), Y + 9 + ((h >>> 8) % 12)];
+}
+function desenhaJogos() {
+  const L2 = state.nav && state.nav.lugares;
+  if (!L2 || !L2.jogos.length) return;
+  const agora = Date.now();
+  for (const lj of L2.jogos) {
+    const j = state.jogos.get(lj.id), rodando = !!(j && j.inicio), t = rodando ? (agora - j.inicio) / 1000 : 0;
+    const X = lj.x * T, Y = lj.y * T;
+    if (lj.tipo === 'sinuca') {
+      const cores = ['#f7f3ea', '#f2c14e', '#d9534f', '#4a7fd4', '#8a63d2', '#f0883e', '#1f2228'];
+      // depois de cada tacada as bolas rolam até a nova posição (2,6 s por tacada)
+      const k = rodando ? Math.floor(t / 2.6) : 0, f = rodando ? Math.min(1, ((t / 2.6) % 1) / 0.45) : 1, ease = 1 - (1 - f) ** 3;
+      cores.forEach((c, i) => {
+        const [ax, ay] = posBola(lj, k, i), [bx, by] = posBola(lj, rodando ? k + 1 : 0, i);
+        const px = rodando ? ax + (bx - ax) * ease : ax, py = rodando ? ay + (by - ay) * ease : ay;
+        pinta(Math.round(px), Math.round(py), 2, 2, c);
+      });
+    } else if (lj.tipo === 'pebolim') {
+      const by = Y + 4 + (rodando ? tri(t * 0.9) * 6 : 3), bx = X + 3 + (rodando ? tri(t * 0.55) * 25 : 12.5);
+      [[6, '#d9534f'], [11, '#4a7fd4'], [20, '#d9534f'], [25, '#4a7fd4']].forEach(([rx, c], ri) => {
+        const alvo = rodando ? Math.max(Y + 4, Math.min(Y + 8, by - 1 + Math.sin(t * 3 + ri) )) : Y + 6;
+        for (const dy of [-3, 3]) pinta(X + rx - 1, Math.round(alvo + dy * (ri % 2 ? 0.7 : 1)), 3, 2, c);
+      });
+      pinta(Math.round(bx), Math.round(by), 2, 2, '#ffffff');
+    } else if (lj.tipo === 'videogame') {
+      const sx = X + 3, sy = Y + 2, w = 26, h = 13;
+      if (!rodando) { pinta(sx, sy, w, h, '#22262e'); pinta(X + 10, Y + 19, 1, 1, agora % 2000 < 1000 ? '#d9534f' : '#5a2a2a'); continue; }
+      // pong de dois jogadores
+      pinta(sx, sy, w, h, '#0f1a2a');
+      for (let yy = 0; yy < h; yy += 3) pinta(sx + 13, sy + yy, 1, 2, '#2c4766');
+      const bx = sx + 2 + tri(t * 0.8) * (w - 5), byy = sy + 1 + tri(t * 1.1) * (h - 3);
+      const pl = Math.max(sy, Math.min(sy + h - 4, byy - 1 + Math.sin(t * 2) * 2)), pr = Math.max(sy, Math.min(sy + h - 4, byy - 2 + Math.cos(t * 1.7) * 2));
+      pinta(sx + 1, Math.round(pl), 1, 4, '#7fd1ff'); pinta(sx + w - 2, Math.round(pr), 1, 4, '#f28b82');
+      pinta(Math.round(bx), Math.round(byy), 2, 2, '#ffffff');
+      pinta(X + 10, Y + 19, 1, 1, '#4fa66a');
+    }
+  }
+}
+
 // luz da porta do banheiro: vermelha com alguém lá dentro
 function luzesBanheiro() {
   const L2 = state.nav && state.nav.lugares;
@@ -1246,7 +1409,7 @@ function mostrarVontades(agent) {
   if (!e || !e.vont) { box.hidden = true; return; }
   box.hidden = false;
   const a = e.atv;
-  const agora = naMesa(e.agent) ? L.doing.fixo : e.mode === 'seated' ? L.doing.mesa : a ? (e.indo ? L.doing.indo + ': ' : '') + L.doing[FAZENDO[a.tipo]] : L.doing.livre;
+  const agora = naMesa(e.agent) ? L.doing.fixo : e.mode === 'seated' ? L.doing.mesa : a ? (e.indo ? L.doing.indo + ': ' : '') + (a.tipo === 'jogar' ? L.doing['jogo_' + a.jogoTipo] : L.doing[FAZENDO[a.tipo]]) : L.doing.livre;
   const linhas = [el('div', 'n-now', `${L.now}: ${agora}`)];
   for (const k of ['sede', 'banheiro', 'social', 'diversao', 'cansaco']) {
     const v = Math.round(e.vont[k]);
@@ -1254,6 +1417,8 @@ function mostrarVontades(agent) {
     bar.title = v + '%';
     linhas.push(el('span', '', L.needs[k]), bar);
   }
+  const vit = lerVitorias()[agent.id];
+  if (vit) linhas.push(el('div', 'n-now', `${L.wins}: ` + [['sinuca', '🎱'], ['pebolim', '⚽'], ['videogame', '🎮']].filter(([k]) => vit[k]).map(([k, ic]) => `${ic} ${vit[k]}`).join(' · ')));
   box.replaceChildren(...linhas);
 }
 setInterval(() => { if (state.selected && !$('#panel').hidden) mostrarVontades(state.selected); }, 1000);

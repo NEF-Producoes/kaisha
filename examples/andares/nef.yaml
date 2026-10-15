@@ -26,6 +26,9 @@ moveis:
   - { tipo: bebedouro, pos: [3, 9] }
   - { tipo: sofa,      pos: [6, 12] }
   - { tipo: banheiro,  pos: [8, 9] }
+  - { tipo: videogame, pos: [1, 11] }
+  - { tipo: pebolim,   pos: [9, 12] }
   - { tipo: planta,    pos: [10, 9] }
-  - { tipo: mesa_reuniao, pos: [16, 10] }
+  - { tipo: mesa_reuniao, pos: [14, 10] }
+  - { tipo: sinuca,       pos: [19, 10] }
   - { tipo: planta,       pos: [22, 12] }

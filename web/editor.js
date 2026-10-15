@@ -14,7 +14,7 @@ const el = (tag, attrs = {}, ...filhos) => {
   for (const f of filhos) if (f != null) e.append(f);
   return e;
 };
-const NOMES_MOVEIS = { estante: 'Estante', planta: 'Planta', relogio: 'Relógio', janela: 'Janela', quadro: 'Quadro', grafico: 'Gráfico', bebedouro: 'Bebedouro', arquivo: 'Arquivo', sofa: 'Sofá', mesa_reuniao: 'Mesa de reunião', impressora: 'Impressora', tapete: 'Tapete', cafe: 'Café', banheiro: 'Banheiro' };
+const NOMES_MOVEIS = { estante: 'Estante', planta: 'Planta', relogio: 'Relógio', janela: 'Janela', quadro: 'Quadro', grafico: 'Gráfico', bebedouro: 'Bebedouro', arquivo: 'Arquivo', sofa: 'Sofá', mesa_reuniao: 'Mesa de reunião', impressora: 'Impressora', tapete: 'Tapete', cafe: 'Café', banheiro: 'Banheiro', sinuca: 'Sinuca', pebolim: 'Pebolim', videogame: 'Videogame' };
 const PISOS = ['madeira', 'madeira_escura', 'carpete_azul', 'carpete_verde', 'ladrilho', 'xadrez'].filter((p) => FLOORS[p]);
 const PAREDES = ['clara', 'azul', 'verde', 'escura'].filter((p) => WALLS[p]);
 const CORES = ['vermelho', 'laranja', 'amarelo', 'verde', 'azul', 'roxo', 'rosa', 'cinza', 'preto', 'branco'].filter((c) => SHIRTS[c]);
